@@ -145,6 +145,30 @@ That gives us a clean experiment: keep the MSB fixed and vary only the LSB. If t
 
 A small non-destructive Web MIDI test for this is included in [`tools/motor-feedback-lsb-test.html`](tools/motor-feedback-lsb-test.html). It sends ordinary Pitch Bend motor-position messages only; it does **not** enter update mode, modify firmware, or write flash.
 
+### Preliminary motor-feedback result — firmware 1.14
+
+A first direct host-to-motor test was performed on an X-Touch Compact running firmware **1.14** in Mackie Control mode. The test deliberately held the Pitch Bend MSB constant while changing only the LSB.
+
+The most important A/B pair was:
+
+```text
+Test A — LSB only
+12800 = E0 00 64   (LSB 0,   MSB 100)
+12927 = E0 7F 64   (LSB 127, MSB 100)
+
+Test B — one normal 7-bit step
+12800 = E0 00 64   (LSB 0, MSB 100)
+12928 = E0 00 65   (LSB 0, MSB 101)
+```
+
+The motor **clearly moved in both tests**. Because Test A keeps the MSB unchanged, this shows that the Compact does not simply discard the low Pitch Bend byte on the motor-feedback receive path.
+
+A staircase using `LSB = 0, 16, 32, ... 127` with `MSB = 100` did **not** yet produce a clean, monotonic set of intermediate positions. Therefore this result must not be described as proof of full 14-bit motor positioning. The current result is narrower:
+
+> **The X-Touch Compact motor-feedback receive path reacts to LSB-only Pitch Bend changes, but its effective sub-step motor resolution and repeatability are not yet established.**
+
+The raw R2 test report is included in [`captures/motor-feedback-lsb-r2-report.txt`](captures/motor-feedback-lsb-r2-report.txt). A follow-up forced-hold test is included as [`tools/motor-feedback-lsb-test-r3.html`](tools/motor-feedback-lsb-test-r3.html); it repeatedly retransmits each target from the same baseline to distinguish true sub-step positioning from servo deadband, settling and snap-back behavior.
+
 ---
 ## 4. The motor fader itself is not a convincing 7-bit bottleneck
 
@@ -406,11 +430,11 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [x] Finer internal fader representation identified
 - [x] MSB-only Mackie fader output call site identified
 - [x] Ableton feedback-map limitation documented as a separate host-side question
-- [ ] Direct LSB-only motor-position test on X-Touch Compact
+- [x] Direct LSB-only motor-position test on X-Touch Compact — low byte affects motor response
 - [ ] Bootloader/update protocol fully documented
 - [ ] Safe recovery path verified
 - [ ] High-resolution experimental patch
-- [ ] Motor stability and repeatability test
+- [ ] Motor sub-step resolution, stability and repeatability test (R3 forced-hold map)
 - [ ] Ableton/SSL Remote end-to-end validation
 
 ---
