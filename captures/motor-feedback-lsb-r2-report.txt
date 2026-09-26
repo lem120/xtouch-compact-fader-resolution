@@ -1,0 +1,122 @@
+X-TOUCH COMPACT MOTOR FEEDBACK LSB TEST R2
+Generated: Sun Sep 27 2026 00:47:24 GMT+0200 (Ora legale dell’Europa centrale)
+
+===== SETUP =====
+Firmware: 1.14
+Mode: Mackie Control
+MIDI output: X-TOUCH COMPACT / Behringer
+Fader/PB channel: 1
+
+===== OBSERVATIONS =====
+Test A same-MSB movement: Clearly moves
+Test B positive control: Clearly moves
+Test C staircase: Uncertain
+Notes: 
+
+===== MIDI LOG =====
+00:37:10.584  MIDI connected
+00:37:29.168  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:37:53.746  Sequence stopped
+00:37:53.748  BEGIN TEST A SAME-MSB LSB-ONLY
+00:37:53.748  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:37:54.500  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:37:55.253  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:37:56.005  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:37:56.758  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:37:57.511  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:37:58.264  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:37:59.016  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:37:59.768  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:00.521  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:38:01.273  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:02.026  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:38:02.779  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:03.533  END TEST A SAME-MSB LSB-ONLY
+00:38:12.673  Sequence stopped
+00:38:12.674  BEGIN TEST B POSITIVE CONTROL
+00:38:12.674  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:13.426  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:38:14.179  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:14.931  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:38:15.684  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:16.436  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:38:17.188  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:17.942  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:38:18.696  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:19.448  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:38:20.201  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:20.954  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:38:21.707  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:22.459  END TEST B POSITIVE CONTROL
+00:38:24.613  Sequence stopped
+00:38:24.614  BEGIN TEST C FIXED-MSB STAIRCASE
+00:38:24.615  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:25.268  TX PB ch=1 raw=12816 lsb=16 msb=100 bytes=[E0 10 64]
+00:38:25.920  TX PB ch=1 raw=12832 lsb=32 msb=100 bytes=[E0 20 64]
+00:38:26.573  TX PB ch=1 raw=12848 lsb=48 msb=100 bytes=[E0 30 64]
+00:38:27.226  TX PB ch=1 raw=12864 lsb=64 msb=100 bytes=[E0 40 64]
+00:38:27.880  TX PB ch=1 raw=12880 lsb=80 msb=100 bytes=[E0 50 64]
+00:38:28.533  TX PB ch=1 raw=12896 lsb=96 msb=100 bytes=[E0 60 64]
+00:38:29.186  TX PB ch=1 raw=12912 lsb=112 msb=100 bytes=[E0 70 64]
+00:38:29.839  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:38:30.492  TX PB ch=1 raw=12912 lsb=112 msb=100 bytes=[E0 70 64]
+00:38:31.145  TX PB ch=1 raw=12896 lsb=96 msb=100 bytes=[E0 60 64]
+00:38:31.798  TX PB ch=1 raw=12880 lsb=80 msb=100 bytes=[E0 50 64]
+00:38:32.451  TX PB ch=1 raw=12864 lsb=64 msb=100 bytes=[E0 40 64]
+00:38:33.104  TX PB ch=1 raw=12848 lsb=48 msb=100 bytes=[E0 30 64]
+00:38:33.758  TX PB ch=1 raw=12832 lsb=32 msb=100 bytes=[E0 20 64]
+00:38:34.411  TX PB ch=1 raw=12816 lsb=16 msb=100 bytes=[E0 10 64]
+00:38:35.065  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:38:35.719  END TEST C FIXED-MSB STAIRCASE
+00:45:44.601  Sequence stopped
+00:45:44.603  BEGIN TEST A SAME-MSB LSB-ONLY
+00:45:44.604  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:45:45.356  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:45:46.109  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:45:46.862  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:45:47.614  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:45:48.367  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:45:49.122  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:45:49.875  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:45:50.629  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:45:51.381  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:45:52.135  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:45:52.890  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:45:53.643  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:45:54.396  END TEST A SAME-MSB LSB-ONLY
+00:45:58.287  Sequence stopped
+00:45:58.288  BEGIN TEST B POSITIVE CONTROL
+00:45:58.289  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:45:59.041  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:45:59.794  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:46:00.547  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:46:01.302  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:46:02.056  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:46:02.810  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:46:03.563  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:46:04.317  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:46:05.070  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:46:05.823  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:46:06.576  TX PB ch=1 raw=12928 lsb=0 msb=101 bytes=[E0 00 65]
+00:46:07.328  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:46:08.081  END TEST B POSITIVE CONTROL
+00:46:11.131  Sequence stopped
+00:46:11.132  BEGIN TEST C FIXED-MSB STAIRCASE
+00:46:11.133  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:46:11.785  TX PB ch=1 raw=12816 lsb=16 msb=100 bytes=[E0 10 64]
+00:46:12.439  TX PB ch=1 raw=12832 lsb=32 msb=100 bytes=[E0 20 64]
+00:46:13.092  TX PB ch=1 raw=12848 lsb=48 msb=100 bytes=[E0 30 64]
+00:46:13.746  TX PB ch=1 raw=12864 lsb=64 msb=100 bytes=[E0 40 64]
+00:46:14.401  TX PB ch=1 raw=12880 lsb=80 msb=100 bytes=[E0 50 64]
+00:46:15.055  TX PB ch=1 raw=12896 lsb=96 msb=100 bytes=[E0 60 64]
+00:46:15.708  TX PB ch=1 raw=12912 lsb=112 msb=100 bytes=[E0 70 64]
+00:46:16.362  TX PB ch=1 raw=12927 lsb=127 msb=100 bytes=[E0 7F 64]
+00:46:17.014  TX PB ch=1 raw=12912 lsb=112 msb=100 bytes=[E0 70 64]
+00:46:17.668  TX PB ch=1 raw=12896 lsb=96 msb=100 bytes=[E0 60 64]
+00:46:18.322  TX PB ch=1 raw=12880 lsb=80 msb=100 bytes=[E0 50 64]
+00:46:18.976  TX PB ch=1 raw=12864 lsb=64 msb=100 bytes=[E0 40 64]
+00:46:19.629  TX PB ch=1 raw=12848 lsb=48 msb=100 bytes=[E0 30 64]
+00:46:20.283  TX PB ch=1 raw=12832 lsb=32 msb=100 bytes=[E0 20 64]
+00:46:20.937  TX PB ch=1 raw=12816 lsb=16 msb=100 bytes=[E0 10 64]
+00:46:21.592  TX PB ch=1 raw=12800 lsb=0 msb=100 bytes=[E0 00 64]
+00:46:22.246  END TEST C FIXED-MSB STAIRCASE
