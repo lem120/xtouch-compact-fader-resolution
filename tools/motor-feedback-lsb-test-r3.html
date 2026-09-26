@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>X-Touch Compact Motor Feedback LSB Hold Test R3</title>
+<style>
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:980px;margin:32px auto;padding:0 18px;line-height:1.5;color:#171717}
+h1{margin-bottom:.2rem}h2{margin-top:2rem}.sub{color:#555;margin-top:0}.warn{padding:12px 14px;border:1px solid #aaa;border-radius:8px;background:#fafafa}.row{margin:12px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}button,select,input,textarea{font:inherit;padding:8px}button{cursor:pointer}button.primary{font-weight:650}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;background:#f5f5f5;padding:12px;border-radius:6px;max-height:360px;overflow:auto}.test{border:1px solid #ddd;border-radius:9px;padding:14px;margin:14px 0}.small{font-size:.92rem;color:#555}.grid{display:grid;grid-template-columns:230px minmax(220px,1fr);gap:8px 12px;align-items:center}@media(max-width:650px){.grid{grid-template-columns:1fr}} code{background:#f3f3f3;padding:.1em .3em;border-radius:4px}
+</style>
+</head>
+<body>
+<h1>X-Touch Compact Motor Feedback LSB Hold Test R3</h1>
+<p class="sub">Forced-hold mapper for the host → motor Pitch Bend path.</p>
+<p class="warn"><strong>Non-firmware / non-destructive.</strong> This page sends only ordinary MIDI Pitch Bend messages. It does not send SysEx, enter update mode, change presets or write flash. Close Ableton Live, X-TOUCH Editor and other MIDI apps. Put the Compact in <strong>Mackie Control mode</strong>. Do not touch the tested fader during a sequence.</p>
+
+<h2>1. Connect</h2>
+<div class="row"><button id="connect" class="primary">Connect MIDI</button><select id="out"><option>Connect first</option></select></div>
+<div class="row">Tested fader: <select id="channel"></select></div>
+<div class="row"><button id="stop">STOP immediately</button><button id="baseline">Hold baseline 12800 for 2 s</button></div>
+<p class="small">R3 differs from R2: every target is retransmitted at 20 Hz for a fixed hold period. Each LSB target is tested from the same 12800 baseline. This removes the cumulative staircase ambiguity seen in R2.</p>
+
+<h2>2. Resolution tests</h2>
+<div class="test">
+<strong>Test D — Short forced-hold map</strong>
+<p>Warm-up, then tests offsets <code>+16, +32, +64, +96, +127</code>. MSB remains 100 for every target. Each target is bracketed by a repeated 12800 baseline.</p>
+<button id="short" class="primary">Run SHORT map (~27 s)</button>
+</div>
+<div class="test">
+<strong>Test E — Full forced-hold map</strong>
+<p>Warm-up, then tests offsets <code>+8, +16, +24, +32, +48, +64, +80, +96, +112, +127</code>. Each phase is sent continuously at 20 Hz.</p>
+<button id="full" class="primary">Run FULL map (~48 s)</button>
+</div>
+<div class="test">
+<strong>Manual target</strong>
+<div class="row">LSB offset from 12800: <input id="manualOffset" type="number" min="0" max="127" value="64"><button id="manual">Hold target for 2 s</button></div>
+<p class="small">For any offset 0–127, the target remains inside MSB 100: <code>raw = 12800 + offset</code>.</p>
+</div>
+
+<h2>3. Record result</h2>
+<div class="grid">
+<label for="fw">Compact firmware</label><input id="fw" value="1.14">
+<label for="mode">Mode</label><select id="mode"><option>Mackie Control</option><option>Standard</option></select>
+<label for="shortobs">Short map</label><select id="shortobs"><option>Not tested</option><option>Progressive positions visible</option><option>Thresholded / only some offsets move</option><option>Only full-span +127 moves</option><option>No visible LSB-only movement</option><option>Uncertain</option></select>
+<label for="fullobs">Full map</label><select id="fullobs"><option>Not tested</option><option>Progressive positions visible</option><option>Thresholded / only some offsets move</option><option>Only full-span +127 moves</option><option>No visible LSB-only movement</option><option>Uncertain</option></select>
+<label for="notes">Notes</label><textarea id="notes" rows="5" placeholder="Camera fixed? Which offsets visibly moved? Any snap-back, hysteresis, buzzing or delayed movement?"></textarea>
+</div>
+<div class="row"><button id="download">Download report</button></div>
+
+<h2>MIDI log</h2>
+<div id="log" class="mono"></div>
+
+<script>
+let midi=null, running=false, timers=[];
+const outSel=document.getElementById('out'),chSel=document.getElementById('channel'),logEl=document.getElementById('log');
+for(let i=0;i<9;i++){const o=document.createElement('option');o.value=i;o.textContent=(i<8?`Fader ${i+1}`:'Master')+` (PB ch ${i+1})`;chSel.appendChild(o)}
+function stamp(){const n=new Date();return n.toLocaleTimeString()+'.'+String(n.getMilliseconds()).padStart(3,'0')}
+function log(s){logEl.textContent+=`${stamp()}  ${s}\n`;logEl.scrollTop=logEl.scrollHeight}
+function refresh(){outSel.innerHTML='';if(!midi)return;[...midi.outputs.values()].forEach(o=>{const op=document.createElement('option');op.value=o.id;op.textContent=`${o.name||'MIDI output'}${o.manufacturer?' — '+o.manufacturer:''}`;outSel.appendChild(op)});const opts=[...outSel.options];const idx=opts.findIndex(o=>/X-TOUCH COMPACT/i.test(o.text));if(idx>=0)outSel.selectedIndex=idx}
+async function connect(){try{midi=await navigator.requestMIDIAccess({sysex:false});refresh();midi.onstatechange=refresh;log('MIDI connected')}catch(e){log('ERROR '+e.message)}}
+function output(){return midi&&midi.outputs.get(outSel.value)}
+function bytes(v){v=Math.max(0,Math.min(16383,Number(v)|0));return {v,lsb:v&0x7f,msb:(v>>7)&0x7f}}
+function sendRaw(v,quiet=false){const o=output();if(!o){if(!quiet)log('ERROR no MIDI output selected');return false}const b=bytes(v),ch=Number(chSel.value)|0;o.send([0xE0+ch,b.lsb,b.msb]);if(!quiet)log(`TX PB ch=${ch+1} raw=${b.v} lsb=${b.lsb} msb=${b.msb}`);return true}
+function clearAll(){timers.forEach(clearTimeout);timers=[];running=false}
+function stop(){clearAll();log('STOP / sequence cancelled')}
+function sleep(ms){return new Promise((resolve,reject)=>{const id=setTimeout(resolve,ms);timers.push(id)})}
+async function hold(raw,ms,label){if(!running)return;const b=bytes(raw);log(`HOLD BEGIN ${label} raw=${b.v} lsb=${b.lsb} msb=${b.msb} duration=${ms}ms rate=20Hz`);const start=performance.now();let count=0;while(running && performance.now()-start<ms){sendRaw(raw,true);count++;await sleep(50)}if(running)log(`HOLD END ${label} raw=${b.v} sends=${count}`)}
+async function warmup(){await hold(12800,1200,'WARMUP BASELINE');await hold(12928,1200,'WARMUP +1 MSB CONTROL');await hold(12800,1200,'WARMUP BASELINE RETURN');}
+async function runMap(name,offsets){clearAll();if(!output()){log('ERROR no MIDI output selected');return}running=true;log(`BEGIN ${name}`);await warmup();for(const off of offsets){if(!running)break;await sleep(300);await hold(12800,900,`OFFSET ${off} BASELINE PRE`);await hold(12800+off,1200,`OFFSET ${off} TARGET`);await hold(12800,900,`OFFSET ${off} BASELINE POST`)}if(running){running=false;log(`END ${name}`)}}
+async function manualHold(){clearAll();if(!output()){log('ERROR no MIDI output selected');return}const off=Math.max(0,Math.min(127,Number(document.getElementById('manualOffset').value)|0));running=true;log(`BEGIN MANUAL OFFSET ${off}`);await hold(12800,1000,'MANUAL BASELINE');await hold(12800+off,2000,`MANUAL OFFSET ${off}`);await hold(12800,1000,'MANUAL BASELINE RETURN');if(running){running=false;log(`END MANUAL OFFSET ${off}`)}}
+document.getElementById('connect').onclick=connect;
+document.getElementById('stop').onclick=stop;
+document.getElementById('baseline').onclick=()=>{clearAll();if(!output()){log('ERROR no MIDI output selected');return}running=true;(async()=>{await hold(12800,2000,'BASELINE ONLY');running=false})()};
+document.getElementById('short').onclick=()=>runMap('TEST D SHORT FORCED-HOLD MAP',[16,32,64,96,127]);
+document.getElementById('full').onclick=()=>runMap('TEST E FULL FORCED-HOLD MAP',[8,16,24,32,48,64,80,96,112,127]);
+document.getElementById('manual').onclick=manualHold;
+document.getElementById('download').onclick=()=>{const out=output();const lines=[
+'X-TOUCH COMPACT MOTOR FEEDBACK LSB HOLD TEST R3','Generated: '+new Date().toString(),'','===== SETUP =====','Firmware: '+document.getElementById('fw').value,'Mode: '+document.getElementById('mode').value,'MIDI output: '+(out?`${out.name||''} / ${out.manufacturer||''}`:'not connected'),'Fader/PB channel: '+(Number(chSel.value)+1),'','===== OBSERVATIONS =====','Short forced-hold map: '+document.getElementById('shortobs').value,'Full forced-hold map: '+document.getElementById('fullobs').value,'Notes: '+document.getElementById('notes').value,'','===== MIDI LOG =====',logEl.textContent];const blob=new Blob([lines.join('\n')],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='XTouch_Compact_Motor_Feedback_LSB_Hold_Test_R3_Report.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
+</script>
+</body>
+</html>

@@ -19,3 +19,9 @@ Recommended test:
 7. Observe whether the motor takes distinct positions while MSB remains 100.
 
 Record the exact controller firmware version and preferably video the fader against a fixed reference.
+
+## motor-feedback-lsb-test-r3.html
+
+Follow-up forced-hold test for the same **host -> motor** path. R3 repeatedly retransmits each target at 20 Hz, always returns to the same raw `12800` baseline, and then tests fixed-MSB LSB offsets individually. This is intended to separate true sub-step positioning from servo settling, deadband and snap-back behavior observed during the first staircase test.
+
+Run the SHORT map first and video the tested fader against a fixed reference.
