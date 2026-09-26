@@ -1,0 +1,10 @@
+X-TOUCH ONE — representative control sample
+Purpose: same decoder path; demonstrates active low bits and finer observed increments.
+
+PB ch=1 raw=12632 lsb= 88 msb= 98
+PB ch=1 raw=12564 lsb= 20 msb= 98 delta=-68
+PB ch=1 raw=12496 lsb= 80 msb= 97 delta=-68
+PB ch=1 raw=12444 lsb= 28 msb= 97 delta=-52
+PB ch=1 raw=12428 lsb= 12 msb= 97 delta=-16
+PB ch=1 raw=12360 lsb= 72 msb= 96 delta=-68
+PB ch=1 raw=12292 lsb=  4 msb= 96 delta=-68

@@ -1,0 +1,13 @@
+X-TOUCH COMPACT — representative Mackie Control sample
+Firmware: 1.14
+Purpose: short excerpt demonstrating MSB-only ordinary travel around the calibrated unity region.
+
+PB ch=1 raw=12288 lsb=  0 msb= 96
+PB ch=1 raw=12416 lsb=  0 msb= 97 delta=128
+PB ch=1 raw=12544 lsb=  0 msb= 98 delta=128
+PB ch=1 raw=12672 lsb=  0 msb= 99 delta=128
+PB ch=1 raw=12800 lsb=  0 msb=100 delta=128
+PB ch=1 raw=12928 lsb=  0 msb=101 delta=128
+PB ch=1 raw=13056 lsb=  0 msb=102 delta=128
+
+At the absolute top endpoint, 16383 (LSB=127/MSB=127) was also observed.
