@@ -80,7 +80,7 @@ SHA256: 7d03b5174f4987d618fb2dadfda50ec65be2054bab3d12a158db12cbdc7941c6
 
 The firmware itself is not redistributed by this repository.
 
-In the Mackie Pitch Bend receive routine around `0x08005A42`, the relevant path extracts:
+In the Mackie Pitch Bend receive routine around `0x0800BA42`, the relevant path extracts:
 
 - MIDI status from bits 8..15;
 - LSB from bits 16..23;
@@ -89,12 +89,12 @@ In the Mackie Pitch Bend receive routine around `0x08005A42`, the relevant path 
 For Pitch Bend channels E0..E8, the decisive sequence is:
 
 ```asm
-0x08005A68  mov   r0, r4
-0x08005A6A  cmp   r5, #112
-0x08005A6C  bls   keep_target
-0x08005A6E  cmp   r0, #127
-0x08005A70  bhs   keep_target
-0x08005A72  adds  r0, r4, #1
+0x0800BA68  mov   r0, r4
+0x0800BA6A  cmp   r5, #112
+0x0800BA6C  bls   keep_target
+0x0800BA6E  cmp   r0, #127
+0x0800BA70  bhs   keep_target
+0x0800BA72  adds  r0, r4, #1
 ```
 
 Interpreted conservatively:
@@ -134,6 +134,6 @@ The number of stable physical positions across the complete fader travel remains
 
 ## Relationship to the transmit path
 
-On controller-to-host output, the firmware does the opposite kind of reduction: it has a finer internal fader representation available, but the normal Mackie send path around `0x080039AC` constructs Pitch Bend with `LSB=0`.
+On controller-to-host output, the firmware does the opposite kind of reduction: it has a finer internal fader representation available, but the normal Mackie send path around `0x080099AC` constructs Pitch Bend with `LSB=0`.
 
 See `docs/firmware-rx-tx-path.md` for the TX/RX path side by side.

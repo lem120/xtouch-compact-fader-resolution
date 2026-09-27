@@ -203,17 +203,17 @@ This made a position-dependent mechanical explanation less likely and gave us a 
 
 Static disassembly of the exact firmware image identified by SHA-256
 `7d03b5174f4987d618fb2dadfda50ec65be2054bab3d12a158db12cbdc7941c6`
-shows the relevant Mackie Pitch Bend receive path around `0x08005A42`.
+shows the relevant Mackie Pitch Bend receive path around `0x0800BA42`.
 
 The decisive instructions are:
 
 ```asm
-0x08005A68  mov   r0, r4        ; target = MSB
-0x08005A6A  cmp   r5, #112      ; r5 = LSB
-0x08005A6C  bls   keep_target
-0x08005A6E  cmp   r0, #127
-0x08005A70  bhs   keep_target
-0x08005A72  adds  r0, r4, #1    ; LSB > 112 -> next 7-bit target
+0x0800BA68  mov   r0, r4        ; target = MSB
+0x0800BA6A  cmp   r5, #112      ; r5 = LSB
+0x0800BA6C  bls   keep_target
+0x0800BA6E  cmp   r0, #127
+0x0800BA70  bhs   keep_target
+0x0800BA72  adds  r0, r4, #1    ; LSB > 112 -> next 7-bit target
 ```
 
 So the observed boundary is not merely a servo artifact. For the normal non-saturated range, the receive-side behavior is equivalent to rounding the 14-bit target to a 7-bit motor target with a threshold between LSB 112 and 113.
@@ -226,7 +226,7 @@ motor7 = (raw14 + 15) >> 7
 
 but the firmware implements the threshold explicitly rather than with that literal arithmetic sequence.
 
-The receive-side finding complements the already identified transmit-side call site around `0x080039AC`, where the normal Mackie fader message deliberately sets the low data byte to zero.
+The receive-side finding complements the already identified transmit-side call site around `0x080099AC`, where the normal Mackie fader message deliberately sets the low data byte to zero.
 
 Full notes are in [`docs/firmware-rx-tx-path.md`](docs/firmware-rx-tx-path.md).
 
@@ -275,6 +275,16 @@ initial stack pointer: 0x200049B8
 reset vector:          0x0800647D
 ```
 
+A subsequent load-base check corrected an important detail in the initial static analysis: **the firmware file is an application image loaded at `0x08006000`, not at `0x08000000`**.
+
+The evidence is internally consistent:
+
+- file offset `0x047C` contains the reset/startup stub; with a `0x08006000` image base, that instruction is at `0x0800647C`, exactly matching the reset vector (Thumb bit set);
+- its literal targets `0x080063B3` and `0x080060ED` map back inside the same file;
+- all flash-like addresses in the vector table are at or above `0x08006000`.
+
+This means the lower `0x6000` bytes of MCU flash are **not contained in `Xtouch_Compact.bin`**. The strongest current interpretation is a separate updater/bootloader region below the application image. Static analysis of X-TOUCH Editor independently shows a boot/update protocol distinct from the normal application protocol. See [`docs/bootloader-updater-notes.md`](docs/bootloader-updater-notes.md).
+
 The binary also contains the peripheral addresses expected from the STM32F1 family, including references consistent with ADC, DMA, RCC and GPIO blocks. The STM32F1 family uses a 12-bit ADC.
 
 Official STM32F1 documentation:
@@ -289,7 +299,7 @@ At this stage we can identify the MCU family from the firmware's memory/peripher
 
 Static disassembly reveals a particularly useful data path.
 
-A DMA-related routine at approximately `0x08000562` copies **nine halfword (16-bit) values** in a loop:
+A DMA-related routine at approximately `0x08006562` copies **nine halfword (16-bit) values** in a loop:
 
 ```asm
 ldrh.w  r1, [r2, r0, lsl #1]
@@ -302,7 +312,7 @@ blo     loop
 
 A tenth halfword is then handled separately.
 
-Later, the fader processing routine around `0x080039E8` also loops exactly nine times and passes each **16-bit sample** into the fader processing function around `0x0800381E`.
+Later, the fader processing routine around `0x080099E8` also loops exactly nine times and passes each **16-bit sample** into the fader processing function around `0x0800981E`.
 
 Nine is exactly the number of motor faders on the Compact: eight channel faders plus the master fader.
 
@@ -312,7 +322,7 @@ This alone does not tell us the effective number of noise-free bits, but it show
 
 ## 7. The firmware keeps a finer internal position than it transmits
 
-The routine around `0x0800381E` maintains a rolling set of 16 halfword samples and a running sum. Once the 16-sample window is populated, the firmware derives two differently scaled values from that sum:
+The routine around `0x0800981E` maintains a rolling set of 16 halfword samples and a running sum. Once the 16-sample window is populated, the firmware derives two differently scaled values from that sum:
 
 ```asm
 ubfx    r0,  r1, #8, #16
@@ -336,7 +346,7 @@ This is the key observation that moved the investigation from *"maybe the hardwa
 
 ## 8. The Mackie Control routine explicitly zeros the low byte
 
-The most direct evidence appears in the Mackie Control output path around `0x080039A8`.
+The most direct evidence appears in the Mackie Control output path around `0x080099A8`.
 
 For an ordinary fader value, the code reduces the value to 7 bits and constructs a message with:
 
@@ -490,6 +500,8 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [x] X-Touch One A/B control test
 - [x] Firmware image located inside X-TOUCH Editor
 - [x] Cortex-M / STM32F1-class firmware map identified
+- [x] Application image load base corrected to `0x08006000`; lower `0x6000` flash bytes are outside the distributed application image
+- [x] Separate Editor boot/update query protocol identified statically
 - [x] Nine-channel 16-bit fader acquisition path identified
 - [x] Finer internal fader representation identified
 - [x] MSB-only Mackie fader output call site identified
@@ -501,7 +513,8 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [x] Exact receive-side 112/113 quantization rule located in firmware
 - [ ] Bootloader/update protocol fully documented
 - [ ] Safe recovery path verified
-- [ ] High-resolution experimental patch
+- [x] TX-only RAW12 diagnostic patch prepared and byte-verified (not flashed)
+- [ ] High-resolution experimental patch validated on hardware
 - [ ] Ableton/SSL Remote end-to-end validation
 
 ---
