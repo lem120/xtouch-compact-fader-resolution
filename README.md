@@ -14,6 +14,7 @@ While developing a high-resolution control workflow for motorized faders, we fou
 - the same test path, using an **X-Touch One**, produces non-zero LSB values and much finer increments;
 - static analysis of the X-Touch Compact firmware bundled with X-TOUCH Editor shows that the controller keeps more position information internally than it exposes in its normal Mackie Control fader output;
 - the Mackie Control output routine explicitly constructs the ordinary fader message with a zero low data byte and a 7-bit fader value in the high data byte, with a special full-scale case.
+- on the **host -> motor** path, the Compact can distinguish two consecutive 14-bit Pitch Bend targets while the MSB remains unchanged: at the tested operating point `12912` (`LSB=112, MSB=100`) resolves low, while `12913` (`LSB=113, MSB=100`) resolves high.
 
 The current evidence therefore points to **quantization in the firmware/output path**, rather than a fundamental 7-bit limitation of the motor fader itself.
 
@@ -111,65 +112,81 @@ This does **not** by itself tell us whether the Compact is limited by its fader,
 ---
 
 
-## 3. A separate question: Ableton Live motor-feedback mapping
+## 3. Host-to-motor resolution: the LSB is actually processed
 
-During this investigation we also found a potentially separate limitation on the **host-to-controller** side. Some Ableton Remote Script users report that `Live.MidiMap.PitchBendFeedbackRule.value_pair_map` behaves as a table whose mapping values are limited to the integer range `0..127`. In that API path, a full mapping can therefore describe at most 128 distinct feedback positions.
-
-That observation is relevant, but it must not be confused with the Compact result documented above. Our primary measurements concern the opposite direction:
+A separate question is what happens in the opposite direction:
 
 ```text
-physical fader -> X-Touch Compact firmware -> USB MIDI -> host
+host -> USB MIDI -> X-Touch Compact -> motor target
 ```
 
-The Compact already emits `LSB=0` and 128-unit Pitch Bend steps **before Ableton performs any feedback mapping**. The X-Touch One A/B test also shows that the same capture chain preserves active low bits when a controller actually sends them.
+Some Ableton Remote Script users report that `Live.MidiMap.PitchBendFeedbackRule.value_pair_map` behaves like a mapping table with values in the integer range `0..127`. That API-level observation is relevant to Live integrations, but it is **not** the same question as the native resolution of MIDI Pitch Bend or the Compact motor receive path.
 
-So there may be **two independent resolution questions**:
+For this investigation we therefore bypassed Live's feedback-map abstraction and sent raw two-byte Pitch Bend values directly to the Compact.
 
-| Direction | Possible limitation | Current status |
-|---|---|---|
-| controller -> host | Compact Mackie output path | measured and traced in firmware |
-| host -> motor | Ableton `PitchBendFeedbackRule.value_pair_map` | community observation; not yet independently reproduced here |
+### 3.1 First result: same-MSB LSB-only changes move the motor
 
-### Why SSL Remote is useful for separating the two
-
-A Control Surface script does not have to use Live's feedback-map abstraction for every motor update. It can construct the two Pitch Bend data bytes directly:
-
-```python
-raw = max(0, min(16383, raw))
-lsb = raw & 0x7F
-msb = (raw >> 7) & 0x7F
-message = (0xE0 + channel, lsb, msb)
-```
-
-That gives us a clean experiment: keep the MSB fixed and vary only the LSB. If the Compact motor moves to finer positions, then the receive/motor path can use more resolution than the physical-fader transmit path. If it remains stationary until the MSB changes, then the receive path is also effectively 7-bit.
-
-A small non-destructive Web MIDI test for this is included in [`tools/motor-feedback-lsb-test.html`](tools/motor-feedback-lsb-test.html). It sends ordinary Pitch Bend motor-position messages only; it does **not** enter update mode, modify firmware, or write flash.
-
-### Preliminary motor-feedback result — firmware 1.14
-
-A first direct host-to-motor test was performed on an X-Touch Compact running firmware **1.14** in Mackie Control mode. The test deliberately held the Pitch Bend MSB constant while changing only the LSB.
-
-The most important A/B pair was:
+With firmware **1.14**, Mackie Control mode, fader/PB channel 1, the initial test compared:
 
 ```text
-Test A — LSB only
-12800 = E0 00 64   (LSB 0,   MSB 100)
+12800 = E0 00 64   (LSB   0, MSB 100)
 12927 = E0 7F 64   (LSB 127, MSB 100)
-
-Test B — one normal 7-bit step
-12800 = E0 00 64   (LSB 0, MSB 100)
-12928 = E0 00 65   (LSB 0, MSB 101)
 ```
 
-The motor **clearly moved in both tests**. Because Test A keeps the MSB unchanged, this shows that the Compact does not simply discard the low Pitch Bend byte on the motor-feedback receive path.
+The motor moved even though the MSB never changed. A normal one-MSB control step, `12800 -> 12928`, produced a comparable movement. This ruled out the simple hypothesis that the Compact always discards the Pitch Bend low byte on receive.
 
-A staircase using `LSB = 0, 16, 32, ... 127` with `MSB = 100` did **not** yet produce a clean, monotonic set of intermediate positions. Therefore this result must not be described as proof of full 14-bit motor positioning. The current result is narrower:
+However, an LSB staircase did not produce a clean continuum of intermediate physical positions. That led to a series of threshold tests rather than a claim of full 14-bit motor positioning.
 
-> **The X-Touch Compact motor-feedback receive path reacts to LSB-only Pitch Bend changes, but its effective sub-step motor resolution and repeatability are not yet established.**
+### 3.2 Exact same-MSB boundary at this operating point
 
-The raw R2 test report is included in [`captures/motor-feedback-lsb-r2-report.txt`](captures/motor-feedback-lsb-r2-report.txt). A follow-up forced-hold test is included as [`tools/motor-feedback-lsb-test-r3.html`](tools/motor-feedback-lsb-test-r3.html); it repeatedly retransmits each target from the same baseline to distinguish true sub-step positioning from servo deadband, settling and snap-back behavior.
+The decisive tests kept **MSB = 100** throughout and examined adjacent 14-bit target values.
+
+From the lower state:
+
+```text
+12912 = LSB 112 / MSB 100  -> stays low
+12913 = LSB 113 / MSB 100  -> moves high
+```
+
+From the upper state, armed at `12927` while still keeping `MSB = 100`:
+
+```text
+12913 = LSB 113 / MSB 100  -> stays high
+12912 = LSB 112 / MSB 100  -> returns low
+```
+
+So the observed boundary is the same in both directions:
+
+```text
+12912 -> lower motor state
+12913 -> upper motor state
+```
+
+These two MIDI targets differ by exactly **one 14-bit raw count**, and the MSB is identical. This is strong evidence that the low byte is processed before a later motor-position conversion or quantization stage.
+
+It is **not** evidence that the motor has 16,384 stable physical positions. The observed behavior at this point is better described as a fine digital target feeding a coarser physical/servo state. The number of stable motor states across the full travel is still unknown.
+
+
+### 3.3 Reproducible evidence
+
+The two boundary tests included in this repository are:
+
+- [`tools/motor-feedback-lsb-exact-threshold-r5.html`](tools/motor-feedback-lsb-exact-threshold-r5.html) — lower-state scan around `LSB 112..116`;
+- [`tools/motor-feedback-lsb-upper-boundary-r8.html`](tools/motor-feedback-lsb-upper-boundary-r8.html) — same-MSB upper-state return scan from `LSB 127` down through the `113/112` boundary.
+
+Raw logs are included as:
+
+- [`captures/motor-feedback-lsb-r5-exact-threshold-report.txt`](captures/motor-feedback-lsb-r5-exact-threshold-report.txt);
+- [`captures/motor-feedback-lsb-r8-upper-boundary-report.txt`](captures/motor-feedback-lsb-r8-upper-boundary-report.txt).
+
+A fuller discussion of the methodology and the distinction between **message resolution**, **target resolution** and **physical motor resolution** is in [`docs/motor-feedback-boundary.md`](docs/motor-feedback-boundary.md).
+
+### 3.4 What remains open
+
+The `112/113` boundary is currently established only around this tested region. The next useful experiment is to repeat the same adjacent-count search at several MSB regions across the fader travel. If the boundary pattern repeats regularly, that will help identify the internal target-conversion rule; if it changes with position, calibration or servo mapping is likely involved.
 
 ---
+
 ## 4. The motor fader itself is not a convincing 7-bit bottleneck
 
 Behringer lists the **MF100T** as the replacement motor fader for both the X-Touch and X-Touch Compact. It uses a 100 mm, 10 kΩ linear resistive track.
@@ -330,7 +347,7 @@ The measured 7-bit behavior is not merely an accident of Ableton, MIDI decoding,
 1. The exact usable physical resolution of the MF100T in the Compact chassis.
 2. The effective number of noise-free ADC bits after power-supply noise, track noise and mechanical repeatability.
 3. Whether a 12-bit-to-14-bit output mapping will feel stable without additional filtering/hysteresis.
-4. Whether motor positioning/feedback remains stable at the finer target resolution.
+4. How many distinct, stable motor positions exist across the full travel, and whether the same adjacent-count boundary pattern repeats at other positions.
 5. The exact MCU part number.
 6. A safe, repeatable recovery procedure for experimental firmware on every hardware revision.
 7. Compatibility of a future patch with every Compact firmware/board revision.
@@ -431,10 +448,12 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [x] MSB-only Mackie fader output call site identified
 - [x] Ableton feedback-map limitation documented as a separate host-side question
 - [x] Direct LSB-only motor-position test on X-Touch Compact — low byte affects motor response
+- [x] Same-MSB adjacent-count boundary reproduced: `12912` low / `12913` high at the tested point
+- [x] Boundary checked from both lower and upper states
+- [ ] Repeat adjacent-count boundary search at multiple MSB regions across the fader travel
 - [ ] Bootloader/update protocol fully documented
 - [ ] Safe recovery path verified
 - [ ] High-resolution experimental patch
-- [ ] Motor sub-step resolution, stability and repeatability test (R3 forced-hold map)
 - [ ] Ableton/SSL Remote end-to-end validation
 
 ---
