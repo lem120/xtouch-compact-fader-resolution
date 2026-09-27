@@ -336,3 +336,40 @@ Therefore the earlier expectation of a finalize/reboot SysEx after frame 28 was 
 During the R4.7 virtual run, X-TOUCH Editor crashed after the final acknowledgement. The capture itself had already completed successfully. The crash is therefore a host-side post-loop/teardown event, not evidence of a missing post-transfer MIDI command. Its exact cause remains unassigned pending crash-log or teardown-path analysis.
 
 No further virtual runs should intentionally progress beyond the final block acknowledgement until the host teardown path is understood.
+
+
+## Host-side teardown after the transfer loop
+
+Static analysis of the worker wrapper shows that after the 29-block transfer routine returns, the Editor does not send further MIDI. The wrapper:
+
+1. returns from the transfer routine;
+2. clears a global/state value;
+3. frees/clears a host-side buffer object;
+4. enters the thread/run-loop notification/cleanup path.
+
+This matches the R4.7 capture, where no post-transfer SysEx was observed after block 28.
+
+The X-TOUCH Editor crash seen after the final virtual acknowledgement therefore occurs in host-side post-loop cleanup or UI/thread notification, not in a missing MIDI finalize command.
+
+## Physical destination mapping: strongest supported inference
+
+The Editor never transmits a flash address in the captured block frames; it transmits only a block index. Therefore the physical destination address is selected entirely by the bootloader and cannot be proven from the host binary alone.
+
+However, the application image is known to begin at `0x08006000`, and 28 blocks of `0x800` bytes exactly cover the padded `0xE000` application slot:
+
+```text
+block 1  -> inferred application address 0x08006000
+block 2  -> inferred application address 0x08006800
+...
+block 28 -> inferred application address 0x08013800 .. 0x08013FFF
+```
+
+For `i >= 1`, the natural mapping is therefore:
+
+```text
+address(i) = 0x08006000 + (i - 1) * 0x800
+```
+
+This is a strong architectural inference, not yet a direct bootloader observation.
+
+Block 0 cannot safely be mapped linearly to `0x08005800`: the host sends uninitialized heap contents in block 0, and writing those bytes would corrupt 2 KiB immediately below the application on every official update. Therefore the bootloader must treat block index 0 specially (for example, ignore its payload or use the frame only as a protocol/setup stage). The exact block-0 bootloader behavior remains unverified.
