@@ -524,6 +524,7 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [x] `@ABR` reclassified as normal Layer A/B retrieval, not APP-to-uBoot transition
 - [x] Later Editor command templates `@AB\``, `@ABa` and `@ABb` identified
 - [ ] Exact semantics/order of `@AB\``, `@ABa` and `@ABb` established
+- [x] Stateful virtual-uBoot R4 emulator prepared and published
 - [ ] Stateful virtual-uBoot R4 capture completed
 - [x] Nine-channel 16-bit fader acquisition path identified
 - [x] Finer internal fader representation identified
