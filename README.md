@@ -279,6 +279,7 @@ A subsequent load-base check corrected an important detail in the initial static
 
 The evidence is internally consistent:
 
+- startup code at `0x080063E8..0x080063EC` explicitly writes `0x08006000` to the Cortex-M VTOR register at `0xE000ED08`;
 - file offset `0x047C` contains the reset/startup stub; with a `0x08006000` image base, that instruction is at `0x0800647C`, exactly matching the reset vector (Thumb bit set);
 - its literal targets `0x080063B3` and `0x080060ED` map back inside the same file;
 - all flash-like addresses in the vector table are at or above `0x08006000`.

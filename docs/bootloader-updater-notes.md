@@ -22,7 +22,17 @@ SP:            0x200049B8
 reset vector:  0x0800647D
 ```
 
-The reset code is physically present at file offset `0x047C`. With a load base of `0x08006000`, that becomes address `0x0800647C`, exactly matching the vector after clearing the Thumb bit.
+The load base is also set explicitly by the application startup code:
+
+```asm
+0x080063E8  ldr   r1, [pc, ...]   ; 0xE000ED08 (SCB->VTOR)
+0x080063EA  ldr   r0, [pc, ...]   ; 0x08006000
+0x080063EC  str   r0, [r1]
+```
+
+So the application directly programs the Cortex-M vector-table offset register to `0x08006000`.
+
+The reset code is physically present at file offset `0x047C`. With the same load base, that becomes address `0x0800647C`, exactly matching the reset vector after clearing the Thumb bit.
 
 The stub loads targets `0x080063B3` and `0x080060ED`; both map back into the same file under the same base.
 
