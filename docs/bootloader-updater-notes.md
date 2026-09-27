@@ -418,3 +418,21 @@ The canary is checked only when the transfer loop reaches block count `0x1D` (29
 Therefore the R4.7 crash is **not** evidence of a missing post-transfer MIDI command or teardown race. It is a reproducible host-side ARM64 buffer-overflow defect in X-TOUCH Editor 1.21.0's firmware-update worker.
 
 No physical Compact was connected during this finding.
+
+
+### The same overflow exists in the x86_64 slice
+
+The x86_64 build of X-TOUCH Editor 1.21.0 contains the same off-by-three stack overwrite.
+
+Relevant layout:
+
+```text
+packed-frame destination: rbp - 0x950
+memcpy length:             0x92B
+write end:                 rbp - 0x25
+stack canary:              rbp - 0x28
+```
+
+Therefore the copy overwrites three bytes of the stack canary on x86_64 as well. The x86_64 worker then performs the same `__stack_chk_guard` comparison and calls `__stack_chk_fail` on mismatch.
+
+This rules out Rosetta/x86_64 execution as a workaround for the host-side updater crash.
