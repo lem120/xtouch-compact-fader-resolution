@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>X-Touch Compact Motor Feedback LSB Exact Threshold Test R5</title>
+<style>
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:980px;margin:32px auto;padding:0 18px;line-height:1.5;color:#171717}
+h1{margin-bottom:.2rem}h2{margin-top:2rem}.sub{color:#555;margin-top:0}.warn{padding:12px 14px;border:1px solid #aaa;border-radius:8px;background:#fafafa}.row{margin:12px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}button,select,input,textarea{font:inherit;padding:8px}button{cursor:pointer}button.primary{font-weight:650}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;background:#f5f5f5;padding:12px;border-radius:6px;max-height:390px;overflow:auto}.test{border:1px solid #ddd;border-radius:9px;padding:14px;margin:14px 0}.small{font-size:.92rem;color:#555}.grid{display:grid;grid-template-columns:250px minmax(220px,1fr);gap:8px 12px;align-items:center}@media(max-width:650px){.grid{grid-template-columns:1fr}} code{background:#f3f3f3;padding:.1em .3em;border-radius:4px}
+</style></head>
+<body>
+<h1>X-Touch Compact Motor Feedback LSB Exact Threshold Test R5</h1>
+<p class="sub">Exact positive threshold + reverse-direction symmetry test.</p>
+<p class="warn"><strong>Non-firmware / non-destructive.</strong> Sends only ordinary MIDI Pitch Bend messages. No SysEx, preset write or flash access. Close Ableton Live, X-TOUCH Editor and other MIDI apps. Put the Compact in <strong>Mackie Control mode</strong>. Do not touch the tested fader during a sequence.</p>
+
+<h2>1. Connect</h2>
+<div class="row"><button id="connect" class="primary">Connect MIDI</button><select id="out"><option>Connect first</option></select></div>
+<div class="row">Tested fader: <select id="channel"></select></div>
+<div class="row"><button id="stop">STOP immediately</button><button id="base100">Hold 12800 for 2 s</button><button id="base101">Hold 12928 for 2 s</button></div>
+<p class="small">R4 video analysis: +112 showed no sustained displacement, while +116 and all larger tested offsets moved. R5 resolves the boundary at one raw count and checks whether the same deadband exists in the opposite direction.</p>
+
+<h2>2. Exact threshold tests</h2>
+<div class="test"><strong>TEST G — Positive exact threshold</strong>
+<p>Anchor <code>12800</code>. Tests deltas <code>+112, +113, +114, +115, +116</code>. Every target still has MSB 100 and changes only the LSB.</p>
+<button id="positive" class="primary">Run TEST G (~25 s)</button></div>
+<div class="test"><strong>TEST H — Reverse-direction symmetry</strong>
+<p>Anchor <code>12928</code>. Tests the same error magnitudes downward: <code>-112, -113, -114, -115, -116</code>. This checks whether the threshold follows <em>distance from the current motor position</em> rather than an absolute LSB code.</p>
+<button id="reverse" class="primary">Run TEST H (~25 s)</button></div>
+<div class="test"><strong>Combined run</strong><p>Runs G, pauses 1 second, then runs H.</p><button id="both">Run G + H (~55 s)</button></div>
+
+<h2>3. Record result</h2>
+<div class="grid">
+<label for="fw">Compact firmware</label><input id="fw" value="1.14">
+<label for="mode">Mode</label><select id="mode"><option>Mackie Control</option><option>Standard</option></select>
+<label for="pos">Positive first moving delta</label><select id="pos"><option>Not determined</option><option>113</option><option>114</option><option>115</option><option>116</option><option>Only >116</option><option>Uncertain</option></select>
+<label for="neg">Reverse first moving delta</label><select id="neg"><option>Not determined</option><option>113</option><option>114</option><option>115</option><option>116</option><option>Only >116</option><option>Uncertain</option></select>
+<label for="shape">Interpretation</label><select id="shape"><option>Not determined</option><option>Approximately symmetric deadband</option><option>Strongly asymmetric / direction dependent</option><option>Absolute-code threshold suspected</option><option>Irregular / non-repeatable</option><option>Uncertain</option></select>
+<label for="notes">Notes</label><textarea id="notes" rows="5" placeholder="First visible movement in each direction; does it reach almost the +1 MSB position; chatter, overshoot, snap-back, hysteresis?"></textarea>
+</div>
+<div class="row"><button id="download">Download report</button></div>
+<h2>MIDI log</h2><div id="log" class="mono"></div>
+
+<script>
+let midi=null,running=false,timers=[];
+const outSel=document.getElementById('out'),chSel=document.getElementById('channel'),logEl=document.getElementById('log');
+for(let i=0;i<9;i++){const o=document.createElement('option');o.value=i;o.textContent=(i<8?`Fader ${i+1}`:'Master')+` (PB ch ${i+1})`;chSel.appendChild(o)}
+function stamp(){const n=new Date();return n.toLocaleTimeString()+'.'+String(n.getMilliseconds()).padStart(3,'0')}
+function log(s){logEl.textContent+=`${stamp()}  ${s}\n`;logEl.scrollTop=logEl.scrollHeight}
+function refresh(){outSel.innerHTML='';if(!midi)return;[...midi.outputs.values()].forEach(o=>{const op=document.createElement('option');op.value=o.id;op.textContent=`${o.name||'MIDI output'}${o.manufacturer?' — '+o.manufacturer:''}`;outSel.appendChild(op)});const opts=[...outSel.options];const idx=opts.findIndex(o=>/X-TOUCH COMPACT/i.test(o.text));if(idx>=0)outSel.selectedIndex=idx}
+async function connect(){try{midi=await navigator.requestMIDIAccess({sysex:false});refresh();midi.onstatechange=refresh;log('MIDI connected')}catch(e){log('ERROR '+e.message)}}
+function output(){return midi&&midi.outputs.get(outSel.value)}
+function bytes(v){v=Math.max(0,Math.min(16383,Number(v)|0));return {v,lsb:v&0x7f,msb:(v>>7)&0x7f}}
+function sendRaw(v,quiet=false){const o=output();if(!o){if(!quiet)log('ERROR no MIDI output selected');return false}const b=bytes(v),ch=Number(chSel.value)|0;o.send([0xE0+ch,b.lsb,b.msb]);if(!quiet)log(`TX PB ch=${ch+1} raw=${b.v} lsb=${b.lsb} msb=${b.msb}`);return true}
+function clearAll(){timers.forEach(clearTimeout);timers=[];running=false}
+function stop(){clearAll();log('STOP / sequence cancelled')}
+function sleep(ms){return new Promise(resolve=>{const id=setTimeout(resolve,ms);timers.push(id)})}
+async function hold(raw,ms,label){if(!running)return;const b=bytes(raw);log(`HOLD BEGIN ${label} raw=${b.v} lsb=${b.lsb} msb=${b.msb} duration=${ms}ms rate=20Hz`);const start=performance.now();let count=0;while(running && performance.now()-start<ms){sendRaw(raw,true);count++;await sleep(50)}if(running)log(`HOLD END ${label} raw=${b.v} sends=${count}`)}
+async function phasePositive(){log('BEGIN TEST G POSITIVE EXACT THRESHOLD');await hold(12800,1200,'G WARMUP BASELINE 12800');await hold(12928,1400,'G +1 MSB CONTROL');await hold(12800,1200,'G BASELINE RETURN');const ds=[112,113,114,115,116];for(const d of ds){if(!running)break;await sleep(220);await hold(12800,900,`G DELTA ${d} BASELINE PRE`);await hold(12800+d,1700,`G DELTA ${d} TARGET`);await hold(12800,900,`G DELTA ${d} BASELINE POST`)}if(running)log('END TEST G POSITIVE EXACT THRESHOLD')}
+async function phaseReverse(){log('BEGIN TEST H REVERSE EXACT THRESHOLD');await hold(12928,1200,'H WARMUP BASELINE 12928');await hold(12800,1400,'H -1 MSB CONTROL');await hold(12928,1200,'H BASELINE RETURN');const ds=[112,113,114,115,116];for(const d of ds){if(!running)break;await sleep(220);await hold(12928,900,`H DELTA ${d} BASELINE PRE`);await hold(12928-d,1700,`H DELTA ${d} TARGET`);await hold(12928,900,`H DELTA ${d} BASELINE POST`)}if(running)log('END TEST H REVERSE EXACT THRESHOLD')}
+async function runPositive(){clearAll();if(!output()){log('ERROR no MIDI output selected');return}running=true;await phasePositive();if(running)running=false}
+async function runReverse(){clearAll();if(!output()){log('ERROR no MIDI output selected');return}running=true;await phaseReverse();if(running)running=false}
+async function runBoth(){clearAll();if(!output()){log('ERROR no MIDI output selected');return}running=true;await phasePositive();if(running){await sleep(1000);await phaseReverse()}if(running)running=false}
+document.getElementById('connect').onclick=connect;document.getElementById('stop').onclick=stop;document.getElementById('positive').onclick=runPositive;document.getElementById('reverse').onclick=runReverse;document.getElementById('both').onclick=runBoth;
+document.getElementById('base100').onclick=()=>{clearAll();if(!output()){log('ERROR no MIDI output selected');return}running=true;(async()=>{await hold(12800,2000,'BASELINE 12800 ONLY');running=false})()};
+document.getElementById('base101').onclick=()=>{clearAll();if(!output()){log('ERROR no MIDI output selected');return}running=true;(async()=>{await hold(12928,2000,'BASELINE 12928 ONLY');running=false})()};
+document.getElementById('download').onclick=()=>{const out=output();const lines=['X-TOUCH COMPACT MOTOR FEEDBACK LSB EXACT THRESHOLD TEST R5','Generated: '+new Date().toString(),'','===== SETUP =====','Firmware: '+document.getElementById('fw').value,'Mode: '+document.getElementById('mode').value,'MIDI output: '+(out?`${out.name||''} / ${out.manufacturer||''}`:'not connected'),'Fader/PB channel: '+(Number(chSel.value)+1),'','===== OBSERVATIONS =====','Positive first moving delta: '+document.getElementById('pos').value,'Reverse first moving delta: '+document.getElementById('neg').value,'Interpretation: '+document.getElementById('shape').value,'Notes: '+document.getElementById('notes').value,'','===== MIDI LOG =====',logEl.textContent];const blob=new Blob([lines.join('\n')],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='XTouch_Compact_Motor_Feedback_LSB_Exact_Threshold_Test_R5_Report.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)};
+</script></body></html>
