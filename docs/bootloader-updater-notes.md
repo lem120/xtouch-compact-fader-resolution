@@ -191,19 +191,92 @@ Twenty-eight blocks of `0x800` equal exactly `0xE000`.
 
 This strongly suggests an updater layout consisting of one protocol/control block plus a `0xE000` application slot, which is consistent with an application range beginning at `0x08006000` and extending to `0x08013FFF`.
 
-That mapping remains an **inference from Editor behavior**, not yet a live bus capture of bootloader flash addresses.
+The virtual updater captures R4.3-R4.6 now confirm the transfer structure experimentally.
 
-## uBoot state signature vs block acknowledgement
+## Live virtual updater capture: R4.3-R4.6
 
-The Editor's `@AB6` parser reconstructs a nibble-encoded 32-bit word and treats:
+With the physical Compact disconnected, R4.3 answered `@AB6` with the positive nibble signature `0x11112222`. This directly enabled the Editor's Update path and produced the updater preamble:
 
 ```text
-0x11112222
+@AB8
+@AB3
+@AB4
+@AB5
 ```
 
-as the positive uBoot-state signature.
+followed by a large non-`@AB` SysEx transfer frame.
 
-This corrects the earlier, broader description of the value as a generic updater acknowledgement. The block-transfer acknowledgement path still needs to be documented separately before assigning the same value to write/flash acknowledgement semantics.
+R4.4 captured the first complete transfer frame. Its total wire length is 2364 bytes:
+
+```text
+F0
+00 20 32 00 1E 34 00
+[8 CRC nibbles]
+[2 block-index nibbles]
+00
+[2344 bytes of MIDI-safe payload]
+F7
+```
+
+The 2344-byte payload decodes to one 2048-byte raw block plus the three-byte packing overrun/padding implied by groups of seven raw bytes encoded into groups of eight MIDI-safe bytes.
+
+The packing helper is now verified end-to-end: each group of seven raw bytes becomes eight 7-bit-safe bytes. The first seven output bytes contain the low seven bits of each input byte, and the eighth collects their MSBs.
+
+### CRC algorithm
+
+The Editor CRC helper is equivalent to the STM32 CRC peripheral algorithm:
+
+```text
+polynomial: 0x04C11DB7
+seed:       0xFFFFFFFF
+input:      32-bit little-endian words
+xor-out:    none
+```
+
+The application file is zero-padded to `0xE000` bytes. Before block transfer, the Editor computes the CRC across that entire padded image and stores the 32-bit result at application offset `0x34`.
+
+For the analyzed vendor image:
+
+```text
+overall CRC:        0x1C044CDE
+stored little-endian: DE 4C 04 1C
+image offset:       0x34..0x37
+```
+
+After that patch, the first application block (`0x0000..0x07FF`) has per-block CRC:
+
+```text
+0x73C44D52
+```
+
+which exactly matches the nibble-coded CRC observed in transfer frame 1.
+
+### Block mapping
+
+R4.6 proved the transfer acknowledgement and block progression. The asynchronous transfer callback expects the same nibble value `0x11112222`, but aligned so the signature begins at raw SysEx bytes 5..12:
+
+```text
+F0 40 41 42 36
+02 02 02 02 01 01 01 01
+00 00 00 00 00 00 00
+F7
+```
+
+After this acknowledgement for transfer block 0, the Editor emitted transfer block 1 about 5.3 ms later.
+
+Decoding transfer block 1 produces the first `0x800` bytes of `Xtouch_Compact.bin`, with exactly one expected modification: bytes `0x34..0x37` contain the overall CRC `DE 4C 04 1C` inserted by the Editor.
+
+This experimentally confirms:
+
+```text
+transfer block 0  = updater/control block
+transfer block 1  = application 0x0000..0x07FF
+transfer block 2  = application 0x0800..0x0FFF
+...
+transfer block 28 = final 0x800-byte block of the zero-padded 0xE000 application slot
+```
+
+The live virtual capture therefore confirms the 29-block layout and the mapping of blocks 1..28 to the padded application image. What remains unverified is the bootloader's physical flash-write address calculation and recovery behavior on real hardware.
 
 ## Why this matters for recovery
 
@@ -227,9 +300,9 @@ and does not modify the lower updater region if the Editor writes only the appli
 
 The remaining high-value questions are now narrower:
 
-1. identify the exact semantics and ordering of `@AB\``, `@ABa` and `@ABb` in the firmware-update workflow;
-2. capture the first command the Editor sends after a virtual `@AB6` response proves uBoot is present;
-3. separate uBoot state detection from block-transfer acknowledgement semantics;
+1. determine the bootloader's physical destination address calculation for transfer blocks 1..28;
+2. identify the exact roles of the `@AB8/@AB3/@AB4/@AB5` preamble commands and whether any represent erase/setup/finalize states;
+3. identify the exact semantics of `@AB\``, `@ABa` and `@ABb` in the broader firmware-update workflow;
 4. verify a **Compact-specific** boot-entry/recovery method that does not depend on a working application.
 
 Published instructions located so far describe the X-Touch Mini's power-on update gesture, but that button combination must not be assumed to apply to the Compact without evidence.
