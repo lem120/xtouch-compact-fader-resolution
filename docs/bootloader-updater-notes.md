@@ -4,7 +4,7 @@
 
 This document records static analysis of the updater path in X-TOUCH Editor. It is intended to establish a recoverable firmware-development workflow before any experimental image is flashed.
 
-The current result is encouraging but **does not yet constitute a verified recovery procedure**.
+The current result is encouraging but **does not yet constitute a verified recovery procedure**. A safe virtual-device capture has now separated the normal application query, the uBoot state query, ordinary Editor layer reads, and later update-workflow commands.
 
 ## Application image is loaded at 0x08006000
 
@@ -93,6 +93,87 @@ The Editor waits for a response with matching `40 41 42 36` header and decodes a
 
 The normal application parser does not implement the updater command family observed in the Editor (`0x33`, `0x34`, `0x35`, `0x36`, `0x38`). This supports the interpretation that those messages are handled by code outside the application image.
 
+## Safe Editor-protocol emulation (R3)
+
+A CoreMIDI virtual-device emulator was used with the physical X-Touch Compact powered off / disconnected. The emulator answered only the normal APP `@ABQ` query with the real firmware-1.14 identity reply and logged every other SysEx without acknowledging it.
+
+The observed Editor sequence was:
+
+```text
+@ABQ       -> APP identity query
+@AB6       -> repeated uBoot-state polling
+@ABQ       -> APP re-check
+@ABR 01    -> ordinary Editor command, retried after about 800 ms
+...
+@AB` 00
+@ABa 01
+```
+
+This capture is important because it shows that `@AB6` is **not** an APP-to-uBoot transition command. It is the Editor asking whether uBoot is already present.
+
+### uBoot signature expected by the Editor
+
+Static analysis of the Editor's `@AB6` response parser shows that it reconstructs a 32-bit value from eight low nibbles in response bytes 5 through 12 and tests that value against:
+
+```text
+0x11112222
+```
+
+When the reconstructed value matches, the Editor marks uBoot as present.
+
+With the parser's nibble order, the eight response nibbles representing that signature are:
+
+```text
+02 02 02 02 01 01 01 01
+```
+
+This gives the virtual-device work a concrete, testable uBoot-state response rather than an invented acknowledgement value.
+
+## `@ABR` is not a boot transition command
+
+The R3 capture initially made `@ABR 01` look like a possible transition request because it appeared after unsuccessful `@AB6` polling.
+
+Static analysis of the Editor resolves that ambiguity: `@ABR` belongs to the normal hardware-layer read path. The Editor uses variants including `@ABR 01` / `@ABR 02` for Layer A / Layer B retrieval.
+
+Therefore:
+
+```text
+0x52 / @ABR != APP -> uBoot transition
+```
+
+## Later update-workflow commands
+
+The R3 capture also exposed two later command families:
+
+```text
+0x60 -> @AB`
+0x61 -> @ABa
+```
+
+The Editor contains dedicated send routines for these command templates, and the firmware-update path reaches them after the normal APP/uBoot probing phase.
+
+Their exact semantics are **not yet established**, so they are documented here as update-workflow candidates rather than named as erase, reboot, write, or transition operations.
+
+A further adjacent command template `0x62 -> @ABb` is also present in the Editor binary.
+
+The next safe experiment is therefore a stateful virtual device (R4):
+
+```text
+virtual APP 1.14
+    -> answer @ABQ
+    -> remain silent to @AB6
+
+observed update transition
+    -> switch virtual state only
+
+virtual uBoot
+    -> stop answering @ABQ
+    -> answer @AB6 with the 0x11112222 signature
+    -> log the first post-uBoot command without acknowledging flash operations
+```
+
+No `@AB\``, `@ABa`, `@ABb`, `@AB3`, `@AB4`, `@AB5` or `@AB8` command needs to be sent to the physical Compact for this experiment.
+
 ## Updater block structure
 
 The updater thread:
@@ -112,15 +193,17 @@ This strongly suggests an updater layout consisting of one protocol/control bloc
 
 That mapping remains an **inference from Editor behavior**, not yet a live bus capture of bootloader flash addresses.
 
-## Acknowledgement
+## uBoot state signature vs block acknowledgement
 
-The Editor's update-message parser reconstructs a nibble-encoded 32-bit word and sets its block-acknowledgement flag when that word equals:
+The Editor's `@AB6` parser reconstructs a nibble-encoded 32-bit word and treats:
 
 ```text
 0x11112222
 ```
 
-The exact semantic name of that value is not yet established; it should be treated as an observed updater acknowledgement/signature, not as an application firmware identity value.
+as the positive uBoot-state signature.
+
+This corrects the earlier, broader description of the value as a generic updater acknowledgement. The block-transfer acknowledgement path still needs to be documented separately before assigning the same value to write/flash acknowledgement semantics.
 
 ## Why this matters for recovery
 
@@ -140,10 +223,15 @@ A TX-only patch at application file offset `0x3996` therefore corresponds to phy
 
 and does not modify the lower updater region if the Editor writes only the application slot as the static analysis indicates.
 
-## Remaining blocker
+## Remaining blockers
 
-We still need a **verified X-Touch Compact method for entering update mode independently of a working application**.
+The remaining high-value questions are now narrower:
+
+1. identify the exact semantics and ordering of `@AB\``, `@ABa` and `@ABb` in the firmware-update workflow;
+2. capture the first command the Editor sends after a virtual `@AB6` response proves uBoot is present;
+3. separate uBoot state detection from block-transfer acknowledgement semantics;
+4. verify a **Compact-specific** boot-entry/recovery method that does not depend on a working application.
 
 Published instructions located so far describe the X-Touch Mini's power-on update gesture, but that button combination must not be assumed to apply to the Compact without evidence.
 
-Until the Compact boot-entry/recovery procedure is verified, experimental firmware flashing remains on hold.
+Until those recovery details are verified, experimental firmware flashing remains on hold.
