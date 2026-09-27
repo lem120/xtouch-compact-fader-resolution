@@ -192,7 +192,15 @@ int main(void) {
     s = MIDISourceCreate(gClient, CFSTR("X-TOUCH COMPACT"), &gSource);
     if (s != noErr) { fprintf(stderr, "MIDISourceCreate failed: %d\n", (int)s); cleanup(); return 4; }
 
-    log_line("Virtual CoreMIDI source + destination created as X-TOUCH COMPACT.");
+    /* Match the physical device identity more closely. */
+    MIDIObjectSetStringProperty(gDest, kMIDIPropertyManufacturer, CFSTR("Behringer"));
+    MIDIObjectSetStringProperty(gSource, kMIDIPropertyManufacturer, CFSTR("Behringer"));
+    MIDIObjectSetStringProperty(gDest, kMIDIPropertyModel, CFSTR("X-TOUCH COMPACT"));
+    MIDIObjectSetStringProperty(gSource, kMIDIPropertyModel, CFSTR("X-TOUCH COMPACT"));
+    MIDIObjectSetStringProperty(gDest, kMIDIPropertyDisplayName, CFSTR("X-TOUCH COMPACT"));
+    MIDIObjectSetStringProperty(gSource, kMIDIPropertyDisplayName, CFSTR("X-TOUCH COMPACT"));
+
+    log_line("Virtual CoreMIDI source + destination created as X-TOUCH COMPACT / Behringer.");
     log_line("SAFE R4: APP @ABQ and virtual-uBoot @AB6 are the ONLY replies implemented.");
     log_line("Physical Compact must remain disconnected for the entire run.");
     log_line("Open X-TOUCH Editor; enter its normal firmware-update workflow with the original Behringer .bin.");
