@@ -266,17 +266,32 @@ After this acknowledgement for transfer block 0, the Editor emitted transfer blo
 
 Decoding transfer block 1 produces the first `0x800` bytes of `Xtouch_Compact.bin`, with exactly one expected modification: bytes `0x34..0x37` contain the overall CRC `DE 4C 04 1C` inserted by the Editor.
 
-This experimentally confirms:
+This experimentally confirms the mapping of blocks 1..28 to the padded application image, but a later cross-run comparison corrects the earlier interpretation of block 0.
+
+### Block 0 is uninitialized host-buffer data
+
+The Editor allocates `0xE800` bytes with array `new[]` and does not clear the allocation before loading the application at `buffer + 0x800`. The transfer loop nevertheless begins at block index 0.
+
+Comparing independently captured block-0 frames from R4.4 and R4.6 shows 778 differing raw bytes out of 2048. Their per-block CRCs also differ:
 
 ```text
-transfer block 0  = updater/control block
+R4.4 block 0 CRC: 0x8EC244F7
+R4.6 block 0 CRC: 0x10E2F629
+```
+
+This is consistent with stale/uninitialized heap contents, not a deterministic updater control structure.
+
+The corrected host-side mapping is therefore:
+
+```text
+transfer block 0  = first 0x800 bytes of the uninitialized 0xE800 host allocation
 transfer block 1  = application 0x0000..0x07FF
 transfer block 2  = application 0x0800..0x0FFF
 ...
 transfer block 28 = final 0x800-byte block of the zero-padded 0xE000 application slot
 ```
 
-The live virtual capture therefore confirms the 29-block layout and the mapping of blocks 1..28 to the padded application image. What remains unverified is the bootloader's physical flash-write address calculation and recovery behavior on real hardware.
+This does **not** establish what the bootloader does with block index 0. It may ignore it, treat it specially, or map indices independently. The bootloader's physical flash-write address calculation remains unverified.
 
 ## Why this matters for recovery
 
