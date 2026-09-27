@@ -526,6 +526,10 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [ ] Exact semantics/order of `@AB\``, `@ABa` and `@ABb` established
 - [x] Stateful virtual-uBoot R4 emulator prepared and published
 - [ ] Stateful virtual-uBoot R4 capture completed
+- [x] Physical `@ABR 01` Layer A response captured: 841-byte SysEx beginning `F0 50 51 52 52 01`
+- [x] R4/R4.1 APP->uBoot heuristic (`@AB\`` -> `@ABa`) rejected by live capture
+- [x] R4.2 prepared: exact Layer A replay, no inferred uBoot transition, no update ACK
+- [ ] Verify whether exact Layer A replay enables Editor Update
 - [x] Nine-channel 16-bit fader acquisition path identified
 - [x] Finer internal fader representation identified
 - [x] MSB-only Mackie fader output call site identified
