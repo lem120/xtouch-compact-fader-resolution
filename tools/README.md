@@ -25,3 +25,25 @@ Record the exact controller firmware version and preferably video the fader agai
 Follow-up forced-hold test for the same **host -> motor** path. R3 repeatedly retransmits each target at 20 Hz, always returns to the same raw `12800` baseline, and then tests fixed-MSB LSB offsets individually. This is intended to separate true sub-step positioning from servo settling, deadband and snap-back behavior observed during the first staircase test.
 
 Run the SHORT map first and video the tested fader against a fixed reference.
+
+
+## R5 / R8 same-MSB boundary tests
+
+### `motor-feedback-lsb-exact-threshold-r5.html`
+
+Tests the lower-state threshold around `LSB 112..116` while holding `MSB=100`.
+
+### `motor-feedback-lsb-upper-boundary-r8.html`
+
+Arms the fader at `LSB=127, MSB=100`, then walks downward through `127..112` without changing the MSB.
+
+### Current observed boundary
+
+At the tested operating point on firmware 1.14:
+
+```text
+12912 = LSB 112 / MSB 100 -> lower state
+12913 = LSB 113 / MSB 100 -> upper state
+```
+
+See `docs/motor-feedback-boundary.md` for interpretation and limitations.
