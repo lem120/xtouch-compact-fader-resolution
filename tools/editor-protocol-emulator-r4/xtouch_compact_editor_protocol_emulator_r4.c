@@ -104,18 +104,18 @@ static void handle_sysex(const uint8_t *d, size_t n) {
 
     if (has_header(d, n, 0x60) && d[5] == 0x00 && gState == STATE_APP) {
         gLastAB60 = now_ms();
-        log_line("TRANSITION CANDIDATE part 1 captured: @AB\` 00 (no reply)");
+        log_line("TRANSITION CANDIDATE part 1 captured: @AB` 00 (no reply)");
         return;
     }
 
     if (has_header(d, n, 0x61) && d[5] == 0x01 && gState == STATE_APP) {
         double dt = gLastAB60 < 0.0 ? 1e9 : now_ms() - gLastAB60;
         if (dt <= 250.0) {
-            log_line("TRANSITION CANDIDATE part 2 captured: @ABa 01, %.3f ms after @AB\` 00", dt);
+            log_line("TRANSITION CANDIDATE part 2 captured: @ABa 01, %.3f ms after @AB` 00", dt);
             gState = STATE_UBOOT;
             log_line("VIRTUAL STATE CHANGE: APP -> UBOOT (emulation only; no hardware command sent)");
         } else {
-            log_line("@ABa 01 captured without recent @AB\` 00; state remains APP");
+            log_line("@ABa 01 captured without recent @AB` 00; state remains APP");
         }
         return;
     }
@@ -181,7 +181,7 @@ int main(void) {
         "Physical X-Touch Compact MUST be powered OFF / USB disconnected.\n"
         "Virtual APP identity: firmware 1.14.\n"
         "Virtual uBoot state reply: nibble signature 0x11112222.\n"
-        "Transition heuristic: exact R3 pair @AB\` 00 -> @ABa 01 within 250 ms.\n"
+        "Transition heuristic: exact R3 pair @AB` 00 -> @ABa 01 within 250 ms.\n"
         "SAFETY: no @AB3/@AB4/@AB5/@AB8 acknowledgement, no firmware data, no erase/write/reset command.\n\n");
     fflush(gReport);
 
