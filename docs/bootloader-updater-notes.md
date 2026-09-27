@@ -373,3 +373,48 @@ address(i) = 0x08006000 + (i - 1) * 0x800
 This is a strong architectural inference, not yet a direct bootloader observation.
 
 Block 0 cannot safely be mapped linearly to `0x08005800`: the host sends uninitialized heap contents in block 0, and writing those bytes would corrupt 2 KiB immediately below the application on every official update. Therefore the bootloader must treat block index 0 specially (for example, ignore its payload or use the frame only as a protocol/setup stage). The exact block-0 bootloader behavior remains unverified.
+
+
+## ARM64 X-TOUCH Editor 1.21.0 stack overflow in updater worker
+
+The R4.7 virtual run completed all 29 transfer frames and then X-TOUCH Editor 1.21.0 aborted on macOS 13.7.8.
+
+The macOS crash report identifies:
+
+- signal: `SIGABRT`
+- diagnostic: `stack buffer overflow`
+- faulting thread: `Update xTouch firmware thread`
+- termination path through `__stack_chk_fail`
+
+Static analysis of the native ARM64 slice explains the failure exactly.
+
+The transfer worker beginning around `0x1000039FC` allocates a large local stack frame:
+
+```asm
+mov  w9, #0x1AD0
+bl   ___chkstk_darwin
+sub  sp, sp, #0x1000
+sub  sp, sp, #0xAD0
+```
+
+The stack canary is stored at effective offset `sp + 0x1AC8` after the large allocation.
+
+Later the worker constructs the packed transfer body in a destination beginning at `sp + 0x11A0` and performs:
+
+```asm
+memcpy(dest, src, 0x92B)
+```
+
+The write ends at:
+
+```text
+0x11A0 + 0x92B = 0x1ACB
+```
+
+which overlaps the stack-canary region at `0x1AC8` by three bytes.
+
+The canary is checked only when the transfer loop reaches block count `0x1D` (29) and exits. At that point the mismatch branches to `__stack_chk_fail`, producing the observed crash.
+
+Therefore the R4.7 crash is **not** evidence of a missing post-transfer MIDI command or teardown race. It is a reproducible host-side ARM64 buffer-overflow defect in X-TOUCH Editor 1.21.0's firmware-update worker.
+
+No physical Compact was connected during this finding.
