@@ -17,3 +17,9 @@ Future full captures should include:
 - test gesture (for example, slow sweep around unity).
 
 Keep public captures focused and free of unrelated system information.
+
+
+## Motor-feedback boundary captures
+
+- `motor-feedback-lsb-r5-exact-threshold-report.txt` — lower-state exact threshold scan around LSB 112..116.
+- `motor-feedback-lsb-r8-upper-boundary-report.txt` — upper-state same-MSB return scan through the 113/112 boundary.
