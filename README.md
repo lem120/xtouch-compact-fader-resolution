@@ -286,6 +286,22 @@ The evidence is internally consistent:
 
 This means the lower `0x6000` bytes of MCU flash are **not contained in `Xtouch_Compact.bin`**. The strongest current interpretation is a separate updater/bootloader region below the application image. Static analysis of X-TOUCH Editor independently shows a boot/update protocol distinct from the normal application protocol. See [`docs/bootloader-updater-notes.md`](docs/bootloader-updater-notes.md).
 
+A safe CoreMIDI virtual-device capture has now clarified several Editor commands without connecting the physical Compact:
+
+```text
+@ABQ    normal APP identity query
+@AB6    uBoot state query
+@ABR    normal hardware Layer A/B retrieval (not a boot transition)
+@AB`    later update-workflow command; exact semantics not yet assigned
+@ABa    later update-workflow command; exact semantics not yet assigned
+@ABb    adjacent Editor command template; exact semantics not yet assigned
+```
+
+The Editor's `@AB6` response parser reconstructs a 32-bit value from eight low nibbles and recognizes `0x11112222` as the positive uBoot-state signature. In parser order, those eight nibbles are `02 02 02 02 01 01 01 01`.
+
+This corrects an earlier working hypothesis: the repeated `@AB6` traffic observed after APP identification is uBoot polling, while `@ABR 01` belongs to the ordinary Layer A retrieval path. The next safe step is a stateful virtual-uBoot emulator that answers `@AB6` correctly and records the first post-uBoot command without acknowledging flash operations.
+
+
 The binary also contains the peripheral addresses expected from the STM32F1 family, including references consistent with ADC, DMA, RCC and GPIO blocks. The STM32F1 family uses a 12-bit ADC.
 
 Official STM32F1 documentation:
@@ -503,6 +519,12 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [x] Cortex-M / STM32F1-class firmware map identified
 - [x] Application image load base corrected to `0x08006000`; lower `0x6000` flash bytes are outside the distributed application image
 - [x] Separate Editor boot/update query protocol identified statically
+- [x] Safe Editor/CoreMIDI virtual-device capture completed with physical Compact disconnected
+- [x] `@AB6` confirmed as uBoot-state query; Editor recognizes nibble-coded `0x11112222`
+- [x] `@ABR` reclassified as normal Layer A/B retrieval, not APP-to-uBoot transition
+- [x] Later Editor command templates `@AB\``, `@ABa` and `@ABb` identified
+- [ ] Exact semantics/order of `@AB\``, `@ABa` and `@ABb` established
+- [ ] Stateful virtual-uBoot R4 capture completed
 - [x] Nine-channel 16-bit fader acquisition path identified
 - [x] Finer internal fader representation identified
 - [x] MSB-only Mackie fader output call site identified
