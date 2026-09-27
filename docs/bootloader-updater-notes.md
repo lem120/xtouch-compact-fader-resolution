@@ -323,3 +323,16 @@ The remaining high-value questions are now narrower:
 Published instructions located so far describe the X-Touch Mini's power-on update gesture, but that button combination must not be assumed to apply to the Compact without evidence.
 
 Until those recovery details are verified, experimental firmware flashing remains on hold.
+
+
+## Completion of the 29-block host transfer
+
+R4.7 acknowledged all transfer frames with header indices 0 through 28. The Editor emitted no additional SysEx after the acknowledgement for frame 28.
+
+Static analysis matches the capture: the transfer loop increments the block index and terminates when it reaches `0x1D` (29 blocks). The worker then returns success directly; there is no host-side post-transfer SysEx in this routine.
+
+Therefore the earlier expectation of a finalize/reboot SysEx after frame 28 was incorrect.
+
+During the R4.7 virtual run, X-TOUCH Editor crashed after the final acknowledgement. The capture itself had already completed successfully. The crash is therefore a host-side post-loop/teardown event, not evidence of a missing post-transfer MIDI command. Its exact cause remains unassigned pending crash-log or teardown-path analysis.
+
+No further virtual runs should intentionally progress beyond the final block acknowledgement until the host teardown path is understood.
