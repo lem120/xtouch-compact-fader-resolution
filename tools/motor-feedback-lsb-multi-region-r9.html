@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>X-Touch Compact Multi-Region Same-MSB Boundary Test R9</title>
+<style>
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:1040px;margin:32px auto;padding:0 18px;line-height:1.5;color:#171717}
+h1{margin-bottom:.2rem}h2{margin-top:2rem}.sub{color:#555;margin-top:0}
+.warn{padding:12px 14px;border:1px solid #aaa;border-radius:8px;background:#fafafa}
+.row{margin:12px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button,select,input,textarea{font:inherit;padding:8px}button{cursor:pointer}.primary{font-weight:650}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;background:#f5f5f5;padding:12px;border-radius:6px;max-height:440px;overflow:auto}
+.test{border:1px solid #ddd;border-radius:9px;padding:14px;margin:14px 0}
+.grid{display:grid;grid-template-columns:300px minmax(240px,1fr);gap:8px 12px;align-items:center}
+.small{font-size:.92rem;color:#555}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+code{background:#f3f3f3;padding:.1em .3em;border-radius:4px}
+table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #ddd;padding:7px 9px;text-align:left}
+</style>
+</head>
+<body>
+<h1>X-Touch Compact Multi-Region Same-MSB Boundary Test R9</h1>
+<p class="sub">Tests whether the R5/R8 112/113 boundary repeats at several MSB regions across the fader travel.</p>
+
+<p class="warn"><strong>Non-firmware / non-destructive.</strong> Sends only ordinary MIDI Pitch Bend messages. No SysEx, preset write or flash access. Close Ableton Live, X-TOUCH Editor and other MIDI apps. Put the Compact in <strong>Mackie Control mode</strong>. Do not touch the tested fader during the sequence.</p>
+
+<h2>Purpose</h2>
+<p>R5 and R8 isolated an exact same-MSB boundary around MSB 100:</p>
+<pre class="mono">12912 = LSB 112 / MSB 100 → lower motor state
+12913 = LSB 113 / MSB 100 → upper motor state</pre>
+<p>R9 repeats the same adjacent-count test at multiple MSB regions. If the 112/113 boundary repeats, that supports a regular target-conversion/quantization rule. If it shifts with position, calibration or nonlinear motor mapping becomes more likely.</p>
+
+<h2>1. Connect</h2>
+<div class="row">
+  <button id="connect" class="primary">Connect MIDI</button>
+  <select id="out"><option>Connect first</option></select>
+</div>
+<div class="row">Tested fader: <select id="channel"></select></div>
+<div class="row">
+  <button id="stop">STOP immediately</button>
+  <button id="home100">Hold reference raw 12800</button>
+</div>
+
+<h2>2. Regions</h2>
+<div class="grid">
+  <label>MSB regions (comma-separated)</label>
+  <input id="regions" value="90,99,101,110">
+</div>
+<p class="small">Each region uses <code>LOW = MSB&lt;&lt;7</code> and <code>HIGH = LOW+127</code>. The decisive targets are <code>LOW+112</code> and <code>LOW+113</code>; the MSB therefore remains unchanged within each region.</p>
+
+<div class="test">
+<strong>TEST M — MULTI-REGION 112/113 VALIDATION</strong>
+<p>For each MSB region:</p>
+<table>
+<tr><th>Phase</th><th>Question</th></tr>
+<tr><td>LOW → +112</td><td>Does 112 remain in the lower state?</td></tr>
+<tr><td>LOW → +113</td><td>Does 113 move to the upper state?</td></tr>
+<tr><td>HIGH → +113</td><td>Does 113 remain in the upper state?</td></tr>
+<tr><td>HIGH → +112</td><td>Does 112 return to the lower state?</td></tr>
+</table>
+<button id="run" class="primary">Run TEST M</button>
+</div>
+
+<div class="test">
+<strong>Manual same-MSB confirmation</strong>
+<div class="row">
+MSB <input id="manualMsb" type="number" min="1" max="126" value="99" style="width:90px">
+LSB target <input id="manualLsb" type="number" min="0" max="127" value="113" style="width:90px">
+<select id="manualDirection"><option value="low">Start LOW</option><option value="high">Start HIGH</option></select>
+<button id="manual">Run manual target</button>
+</div>
+</div>
+
+<h2>3. Record result</h2>
+<div class="grid">
+<label>Compact firmware</label><input id="fw" value="1.14">
+<label>Mode</label><select id="mode"><option>Mackie Control</option><option>Standard</option></select>
+<label>MSB 90 result</label><select id="r90"><option>Not determined</option><option>112/113 confirmed</option><option>Different boundary</option><option>Unclear</option></select>
+<label>MSB 99 result</label><select id="r99"><option>Not determined</option><option>112/113 confirmed</option><option>Different boundary</option><option>Unclear</option></select>
+<label>MSB 101 result</label><select id="r101"><option>Not determined</option><option>112/113 confirmed</option><option>Different boundary</option><option>Unclear</option></select>
+<label>MSB 110 result</label><select id="r110"><option>Not determined</option><option>112/113 confirmed</option><option>Different boundary</option><option>Unclear</option></select>
+<label>Notes</label><textarea id="notes" rows="5" placeholder="Movement, chatter, overshoot, any region that behaves differently."></textarea>
+</div>
+<div class="row"><button id="download">Download report</button></div>
+
+<h2>MIDI log</h2>
+<div id="log" class="mono"></div>
+
+<script>
+let midi=null,running=false,timers=[];
+const outSel=document.getElementById('out'), chSel=document.getElementById('channel'), logEl=document.getElementById('log');
+
+for(let i=0;i<9;i++){
+  const o=document.createElement('option');
+  o.value=i;
+  o.textContent=(i<8?`Fader ${i+1}`:'Master')+` (PB ch ${i+1})`;
+  chSel.appendChild(o);
+}
+
+function stamp(){const n=new Date();return n.toLocaleTimeString()+'.'+String(n.getMilliseconds()).padStart(3,'0')}
+function log(s){logEl.textContent+=`${stamp()}  ${s}\n`;logEl.scrollTop=logEl.scrollHeight}
+function refresh(){
+  outSel.innerHTML='';
+  if(!midi)return;
+  [...midi.outputs.values()].forEach(o=>{
+    const op=document.createElement('option');
+    op.value=o.id;
+    op.textContent=`${o.name||'MIDI output'}${o.manufacturer?' — '+o.manufacturer:''}`;
+    outSel.appendChild(op);
+  });
+  const opts=[...outSel.options];
+  const idx=opts.findIndex(o=>/X-TOUCH COMPACT/i.test(o.text));
+  if(idx>=0)outSel.selectedIndex=idx;
+}
+async function connect(){
+  try{
+    midi=await navigator.requestMIDIAccess({sysex:false});
+    refresh(); midi.onstatechange=refresh; log('MIDI connected');
+  }catch(e){log('ERROR '+e.message)}
+}
+function output(){return midi&&midi.outputs.get(outSel.value)}
+function bytes(v){v=Math.max(0,Math.min(16383,Number(v)|0));return{v,lsb:v&127,msb:(v>>7)&127}}
+function sendRaw(v,quiet=false){
+  const o=output();
+  if(!o){if(!quiet)log('ERROR no MIDI output selected');return false}
+  const b=bytes(v),ch=Number(chSel.value)|0;
+  o.send([0xE0+ch,b.lsb,b.msb]);
+  if(!quiet)log(`TX PB ch=${ch+1} raw=${b.v} lsb=${b.lsb} msb=${b.msb}`);
+  return true;
+}
+function clearAll(){timers.forEach(clearTimeout);timers=[];running=false}
+function stop(){clearAll();log('STOP / sequence cancelled')}
+function sleep(ms){return new Promise(r=>{const id=setTimeout(r,ms);timers.push(id)})}
+async function hold(raw,ms,label){
+  if(!running)return;
+  const b=bytes(raw);
+  log(`HOLD BEGIN ${label} raw=${b.v} lsb=${b.lsb} msb=${b.msb} duration=${ms}ms rate=20Hz`);
+  const st=performance.now();let c=0;
+  while(running&&performance.now()-st<ms){
+    sendRaw(raw,true); c++; await sleep(50);
+  }
+  if(running)log(`HOLD END ${label} raw=${b.v} sends=${c}`);
+}
+function parseRegions(){
+  const vals=document.getElementById('regions').value.split(',').map(x=>Number(x.trim())).filter(x=>Number.isInteger(x)&&x>=1&&x<=126);
+  return [...new Set(vals)];
+}
+async function regionWarm(msb){
+  const low=msb<<7, high=low+127;
+  await hold(low,900,`M MSB ${msb} WARM LOW`);
+  await hold(high,1100,`M MSB ${msb} WARM HIGH SAME-MSB`);
+  await hold(low,900,`M MSB ${msb} WARM LOW RETURN`);
+}
+async function lowTrial(msb,lsb){
+  const low=msb<<7, target=low+lsb;
+  await sleep(140);
+  await hold(low,650,`M MSB ${msb} LOW→${lsb} BASELINE`);
+  await hold(target,1150,`M MSB ${msb} LOW→${lsb} TARGET`);
+  await hold(low,650,`M MSB ${msb} LOW→${lsb} RESET`);
+}
+async function highTrial(msb,lsb){
+  const low=msb<<7, high=low+127, target=low+lsb;
+  await sleep(140);
+  await hold(high,900,`M MSB ${msb} HIGH→${lsb} ARM HIGH`);
+  await hold(target,1150,`M MSB ${msb} HIGH→${lsb} TARGET`);
+  await hold(low,650,`M MSB ${msb} HIGH→${lsb} RESET LOW`);
+}
+async function run(){
+  clearAll();
+  if(!output()){log('ERROR no MIDI output selected');return}
+  const regions=parseRegions();
+  if(!regions.length){log('ERROR no valid MSB regions');return}
+  running=true;
+  log(`BEGIN TEST M MULTI-REGION SAME-MSB BOUNDARY regions=${regions.join(',')}`);
+  for(const msb of regions){
+    if(!running)break;
+    log(`BEGIN REGION MSB ${msb}`);
+    await regionWarm(msb);
+    await lowTrial(msb,112);
+    await lowTrial(msb,113);
+    await highTrial(msb,113);
+    await highTrial(msb,112);
+    if(running)log(`END REGION MSB ${msb}`);
+    await sleep(250);
+  }
+  if(running)log('END TEST M MULTI-REGION SAME-MSB BOUNDARY');
+  running=false;
+}
+async function manual(){
+  clearAll();
+  if(!output()){log('ERROR no MIDI output selected');return}
+  const msb=Math.max(1,Math.min(126,Number(document.getElementById('manualMsb').value)||100));
+  const lsb=Math.max(0,Math.min(127,Number(document.getElementById('manualLsb').value)||0));
+  const dir=document.getElementById('manualDirection').value;
+  const low=msb<<7,high=low+127,target=low+lsb;
+  running=true;
+  log(`BEGIN MANUAL MSB ${msb} LSB ${lsb} START ${dir.toUpperCase()}`);
+  if(dir==='high'){
+    await hold(high,1200,`MANUAL MSB ${msb} HIGH ARM`);
+    await hold(target,2200,`MANUAL MSB ${msb} LSB ${lsb} TARGET`);
+  }else{
+    await hold(low,1000,`MANUAL MSB ${msb} LOW BASELINE`);
+    await hold(target,2200,`MANUAL MSB ${msb} LSB ${lsb} TARGET`);
+  }
+  await hold(low,850,`MANUAL MSB ${msb} LOW RESET`);
+  if(running)log(`END MANUAL MSB ${msb} LSB ${lsb}`);
+  running=false;
+}
+document.getElementById('connect').onclick=connect;
+document.getElementById('stop').onclick=stop;
+document.getElementById('run').onclick=run;
+document.getElementById('manual').onclick=manual;
+document.getElementById('home100').onclick=()=>{
+  clearAll();
+  if(!output()){log('ERROR no MIDI output selected');return}
+  running=true;(async()=>{await hold(12800,2000,'REFERENCE RAW 12800');running=false})();
+};
+document.getElementById('download').onclick=()=>{
+  const out=output();
+  const lines=[
+    'X-TOUCH COMPACT MOTOR FEEDBACK LSB MULTI-REGION BOUNDARY TEST R9',
+    'Generated: '+new Date().toString(),
+    '',
+    '===== SETUP =====',
+    'Firmware: '+document.getElementById('fw').value,
+    'Mode: '+document.getElementById('mode').value,
+    'MIDI output: '+(out?`${out.name||''} / ${out.manufacturer||''}`:'not connected'),
+    'Fader/PB channel: '+(Number(chSel.value)+1),
+    'Requested MSB regions: '+document.getElementById('regions').value,
+    '',
+    '===== OBSERVATIONS =====',
+    'MSB 90 result: '+document.getElementById('r90').value,
+    'MSB 99 result: '+document.getElementById('r99').value,
+    'MSB 101 result: '+document.getElementById('r101').value,
+    'MSB 110 result: '+document.getElementById('r110').value,
+    'Notes: '+document.getElementById('notes').value,
+    '',
+    '===== MIDI LOG =====',
+    logEl.textContent
+  ];
+  const blob=new Blob([lines.join('\n')],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='XTouch_Compact_Motor_Feedback_LSB_Multi_Region_Test_R9_Report.txt';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
+</script>
+</body>
+</html>

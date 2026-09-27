@@ -4,7 +4,7 @@
 
 This note documents the host-to-motor side of the X-Touch Compact fader-resolution investigation.
 
-The controller-to-host path is a separate result: in normal Mackie Control travel, the Compact transmits Pitch Bend with `LSB=0` and effectively 7-bit position steps. Here we ask a different question: **does the Compact use the low Pitch Bend byte when receiving motor-position feedback?**
+The controller-to-host path is a separate result: in normal Mackie Control travel, the Compact transmits Pitch Bend with `LSB=0` and effectively 7-bit position steps. Here we ask the opposite question: **does the Compact use the low Pitch Bend byte when receiving motor-position feedback, and where is that information reduced?**
 
 ## Test environment
 
@@ -14,70 +14,126 @@ The controller-to-host path is a separate result: in normal Mackie Control trave
 - Transport: raw Web MIDI Pitch Bend messages
 - DAW feedback-map abstractions: bypassed
 
-Pitch Bend is decoded as:
-
 ```text
 raw14 = LSB + (MSB << 7)
 ```
 
-The tests repeatedly retransmit each target at 20 Hz and return to a known baseline between trials.
+## R5 / R8: exact same-MSB boundary at MSB 100
 
-## Why same-MSB tests matter
-
-A comparison such as `12800 -> 12928` changes the MSB from 100 to 101, so a moving motor does not tell us whether the low byte matters.
-
-The decisive tests instead compare values inside one MSB bucket:
+The decisive comparison is:
 
 ```text
 12912 = LSB 112 / MSB 100
 12913 = LSB 113 / MSB 100
 ```
 
-Only the LSB changes, by one raw 14-bit count.
+From the lower state, 112 remains low and 113 moves high. From the upper state, 113 remains high and 112 returns low.
 
-## Lower-state threshold test (R5)
+The MSB does not change, so this proves that the receive path is not simply discarding the low byte.
 
-Starting from the lower state around raw `12800`, the exact threshold scan tested `LSB 112, 113, 114, 115, 116` while keeping `MSB=100`.
+## R9: useful but reset-confounded multi-region pass
 
-| Raw target | LSB | MSB | Observed motor state |
-|---:|---:|---:|---|
-| 12912 | 112 | 100 | lower |
-| 12913 | 113 | 100 | upper |
-| 12914 | 114 | 100 | upper |
-| 12915 | 115 | 100 | upper |
-| 12916 | 116 | 100 | upper |
+R9 repeated the 112/113 test around MSB 90, 99, 101 and 110 using only the local same-MSB LOW/HIGH span as the reset mechanism.
 
-## Upper-state return test (R8)
+That pass exposed a methodological issue: at some positions the 127-count local span was not sufficient to guarantee a reproducible physical starting state. R9 is therefore retained as an intermediate test, not as the final multi-region result.
 
-The fader was armed at `12927 = LSB 127 / MSB 100` and stepped downward through the same MSB bucket.
+## R10: anchored multi-region validation
 
-| Raw target | LSB | MSB | Observed motor state |
-|---:|---:|---:|---|
-| 12927 ... 12913 | 127 ... 113 | 100 | upper |
-| 12912 | 112 | 100 | lower |
-
-## Current interpretation
-
-At this tested operating point:
+R10 uses external hard anchors only to establish direction/state:
 
 ```text
-12912 -> lower motor state
-12913 -> upper motor state
+HARD LOW  -> local LOW  -> same-MSB target
+HARD HIGH -> local HIGH -> same-MSB target
 ```
 
-These targets differ by exactly one raw 14-bit count while the MSB remains unchanged.
+The decisive target itself remains entirely inside the selected MSB bucket.
 
-> The X-Touch Compact firmware 1.14 motor-feedback receive path processes information from the Pitch Bend LSB deeply enough to distinguish adjacent same-MSB target values at the tested operating point.
+Tested regions:
 
-This does **not** imply 16,384 stable physical motor positions. The evidence is compatible with LSB-aware target processing followed by a coarser internal conversion/quantization stage.
+```text
+MSB 90
+MSB 99
+MSB 101
+MSB 110
+```
 
-## What remains open
+The observed boundary is the same in every tested region:
 
-- how many distinct stable motor positions exist across the full travel;
-- whether the same `112/113` boundary repeats in other MSB regions;
-- whether the boundary varies with calibration or fader position;
-- how this receive-side conversion relates to the MSB-only controller-to-host output routine.
+| Direction | LSB 112 | LSB 113 |
+|---|---|---|
+| From lower state | lower state | next state |
+| From upper state | previous state | upper state |
 
-## Next experiment
+The corresponding raw logs are in:
 
-Repeat the adjacent-count boundary search around several other MSB regions, for example 90, 99, 101 and 110.
+- `captures/motor-feedback-lsb-r9-multi-region-report.txt`
+- `captures/motor-feedback-lsb-r10-anchored-hysteresis-report.txt`
+
+## Firmware result: the boundary is explicit
+
+The exact firmware image analyzed is:
+
+```text
+size:   52,924 bytes
+SHA256: 7d03b5174f4987d618fb2dadfda50ec65be2054bab3d12a158db12cbdc7941c6
+```
+
+The firmware itself is not redistributed by this repository.
+
+In the Mackie Pitch Bend receive routine around `0x08005A42`, the relevant path extracts:
+
+- MIDI status from bits 8..15;
+- LSB from bits 16..23;
+- MSB from bits 24..31.
+
+For Pitch Bend channels E0..E8, the decisive sequence is:
+
+```asm
+0x08005A68  mov   r0, r4
+0x08005A6A  cmp   r5, #112
+0x08005A6C  bls   keep_target
+0x08005A6E  cmp   r0, #127
+0x08005A70  bhs   keep_target
+0x08005A72  adds  r0, r4, #1
+```
+
+Interpreted conservatively:
+
+```c
+target = MSB;
+if (LSB > 112 && target < 127)
+    target++;
+```
+
+That exactly predicts the R5/R8/R10 boundary:
+
+```text
+LSB 112 -> current 7-bit target
+LSB 113 -> next 7-bit target
+```
+
+For non-saturated values it is equivalent in result to `(raw14 + 15) >> 7`, although that is **not** the literal instruction sequence used by the firmware.
+
+## Interpretation
+
+The receive path therefore does process the LSB, but only to round the incoming 14-bit Pitch Bend target into a coarser 7-bit motor target.
+
+That is different from full 14-bit motor positioning:
+
+```text
+14-bit MIDI target
+        ->
+LSB-aware rounding
+        ->
+7-bit motor target
+        ->
+servo control
+```
+
+The number of stable physical positions across the complete fader travel remains a separate question.
+
+## Relationship to the transmit path
+
+On controller-to-host output, the firmware does the opposite kind of reduction: it has a finer internal fader representation available, but the normal Mackie send path around `0x080039AC` constructs Pitch Bend with `LSB=0`.
+
+See `docs/firmware-rx-tx-path.md` for the TX/RX path side by side.

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>X-Touch Compact Anchored Same-MSB Hysteresis Test R10</title>
+<style>
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:1050px;margin:30px auto;padding:0 18px;line-height:1.5;color:#171717}
+h1{margin-bottom:.2rem}.sub{color:#555;margin-top:0}.warn{padding:12px 14px;border:1px solid #aaa;border-radius:8px;background:#fafafa}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:11px 0}.grid{display:grid;grid-template-columns:300px 1fr;gap:8px 12px;align-items:center}
+button,select,input,textarea{font:inherit;padding:8px}button{cursor:pointer}.primary{font-weight:650}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;background:#f5f5f5;padding:12px;border-radius:6px;max-height:460px;overflow:auto}
+.test{border:1px solid #ddd;border-radius:9px;padding:14px;margin:14px 0}
+.small{font-size:.92rem;color:#555} code{background:#f3f3f3;padding:.1em .3em;border-radius:4px}
+table{border-collapse:collapse;width:100%;margin:10px 0}th,td{border:1px solid #ddd;padding:7px 9px;text-align:left}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<h1>X-Touch Compact Anchored Same-MSB Hysteresis Test R10</h1>
+<p class="sub">Uses external hard anchors only to establish a reproducible starting state, then performs the decisive target comparison entirely inside one MSB bucket.</p>
+
+<p class="warn"><strong>Non-destructive MIDI test.</strong> Sends ordinary Pitch Bend only. No SysEx and no firmware writes. Close Ableton Live, X-TOUCH Editor and other MIDI applications. Put the Compact in <strong>Mackie Control mode</strong>. Do not touch the fader while the sequence is running.</p>
+
+<h2>Why R10 exists</h2>
+<p>R9 showed that a same-MSB LOW↔HIGH span of 127 raw counts is not always sufficient to reset the servo state. At some regions, the fader moved LOW→HIGH but ignored the requested HIGH→LOW return. R10 therefore establishes each trial from a deliberately distant anchor before settling onto the local LOW or HIGH reference.</p>
+
+<pre class="mono">Local bucket for MSB M:
+LOW  = M << 7
+HIGH = LOW + 127
+
+Hard LOW anchor  = (M - 2) << 7
+Hard HIGH anchor = ((M + 2) << 7) + 127
+
+The hard anchor is used only to establish direction/state.
+The decisive targets remain:
+LOW + 112 and LOW + 113
+with MSB unchanged at M.</pre>
+
+<h2>1. Connect</h2>
+<div class="row">
+<button id="connect" class="primary">Connect MIDI</button>
+<select id="out"><option>Connect first</option></select>
+</div>
+<div class="row">Tested fader: <select id="channel"></select></div>
+<div class="row"><button id="stop">STOP immediately</button></div>
+
+<h2>2. Regions</h2>
+<div class="grid">
+<label>MSB regions</label><input id="regions" value="90,99,101,110">
+<label>Anchor distance in MSB steps</label><input id="anchorSteps" type="number" min="1" max="8" value="2">
+</div>
+
+<div class="test">
+<strong>TEST N — ANCHORED 112/113 HYSTERESIS VALIDATION</strong>
+<p>For each region, four completely independent trials are executed:</p>
+<table>
+<tr><th>Trial</th><th>Preparation</th><th>Same-MSB target</th></tr>
+<tr><td>UP 112</td><td>Hard LOW → local LOW</td><td>LOW+112</td></tr>
+<tr><td>UP 113</td><td>Hard LOW → local LOW</td><td>LOW+113</td></tr>
+<tr><td>DOWN 113</td><td>Hard HIGH → local HIGH</td><td>LOW+113</td></tr>
+<tr><td>DOWN 112</td><td>Hard HIGH → local HIGH</td><td>LOW+112</td></tr>
+</table>
+<button id="run" class="primary">Run TEST N</button>
+</div>
+
+<h2>3. Observations</h2>
+<div class="grid">
+<label>Firmware</label><input id="fw" value="1.14">
+<label>Mode</label><select id="mode"><option>Mackie Control</option><option>Standard</option></select>
+<label>MSB 90</label><select id="r90"><option>Not determined</option><option>112 low / 113 high both directions</option><option>Direction-dependent hysteresis</option><option>Different boundary</option><option>Unclear</option></select>
+<label>MSB 99</label><select id="r99"><option>Not determined</option><option>112 low / 113 high both directions</option><option>Direction-dependent hysteresis</option><option>Different boundary</option><option>Unclear</option></select>
+<label>MSB 101</label><select id="r101"><option>Not determined</option><option>112 low / 113 high both directions</option><option>Direction-dependent hysteresis</option><option>Different boundary</option><option>Unclear</option></select>
+<label>MSB 110</label><select id="r110"><option>Not determined</option><option>112 low / 113 high both directions</option><option>Direction-dependent hysteresis</option><option>Different boundary</option><option>Unclear</option></select>
+<label>Notes</label><textarea id="notes" rows="5"></textarea>
+</div>
+<div class="row"><button id="download">Download report</button></div>
+
+<h2>MIDI log</h2>
+<div id="log" class="mono"></div>
+
+<script>
+let midi=null,running=false,timers=[];
+const outSel=document.getElementById('out'), chSel=document.getElementById('channel'), logEl=document.getElementById('log');
+
+for(let i=0;i<9;i++){const o=document.createElement('option');o.value=i;o.textContent=(i<8?`Fader ${i+1}`:'Master')+` (PB ch ${i+1})`;chSel.appendChild(o)}
+function stamp(){const n=new Date();return n.toLocaleTimeString()+'.'+String(n.getMilliseconds()).padStart(3,'0')}
+function log(s){logEl.textContent+=`${stamp()}  ${s}\n`;logEl.scrollTop=logEl.scrollHeight}
+function refresh(){
+ outSel.innerHTML=''; if(!midi)return;
+ [...midi.outputs.values()].forEach(o=>{const op=document.createElement('option');op.value=o.id;op.textContent=`${o.name||'MIDI output'}${o.manufacturer?' — '+o.manufacturer:''}`;outSel.appendChild(op)});
+ const opts=[...outSel.options];const idx=opts.findIndex(o=>/X-TOUCH COMPACT/i.test(o.text));if(idx>=0)outSel.selectedIndex=idx;
+}
+async function connect(){try{midi=await navigator.requestMIDIAccess({sysex:false});refresh();midi.onstatechange=refresh;log('MIDI connected')}catch(e){log('ERROR '+e.message)}}
+function output(){return midi&&midi.outputs.get(outSel.value)}
+function b14(v){v=Math.max(0,Math.min(16383,Number(v)|0));return{v,lsb:v&127,msb:(v>>7)&127}}
+function sendRaw(v,quiet=false){
+ const o=output();if(!o){if(!quiet)log('ERROR no MIDI output selected');return false}
+ const b=b14(v),ch=Number(chSel.value)|0;o.send([0xE0+ch,b.lsb,b.msb]);
+ if(!quiet)log(`TX PB ch=${ch+1} raw=${b.v} lsb=${b.lsb} msb=${b.msb}`);return true
+}
+function clearAll(){timers.forEach(clearTimeout);timers=[];running=false}
+function stop(){clearAll();log('STOP / sequence cancelled')}
+function sleep(ms){return new Promise(r=>{const id=setTimeout(r,ms);timers.push(id)})}
+async function hold(raw,ms,label){
+ if(!running)return;const b=b14(raw);
+ log(`HOLD BEGIN ${label} raw=${b.v} lsb=${b.lsb} msb=${b.msb} duration=${ms}ms rate=20Hz`);
+ const st=performance.now();let c=0;
+ while(running&&performance.now()-st<ms){sendRaw(raw,true);c++;await sleep(50)}
+ if(running)log(`HOLD END ${label} raw=${b.v} sends=${c}`)
+}
+function regions(){return [...new Set(document.getElementById('regions').value.split(',').map(x=>Number(x.trim())).filter(x=>Number.isInteger(x)&&x>=4&&x<=123))]}
+function vals(msb){
+ const steps=Math.max(1,Math.min(8,Number(document.getElementById('anchorSteps').value)||2));
+ const low=msb<<7,high=low+127;
+ return {low,high,loAnchor:Math.max(0,(msb-steps)<<7),hiAnchor:Math.min(16383,((msb+steps)<<7)+127),steps}
+}
+async function upTrial(msb,lsb){
+ const v=vals(msb),target=v.low+lsb;
+ await hold(v.loAnchor,1200,`N MSB ${msb} UP${lsb} HARD LOW ANCHOR`);
+ await hold(v.low,1100,`N MSB ${msb} UP${lsb} LOCAL LOW`);
+ await sleep(180);
+ await hold(target,1500,`N MSB ${msb} UP${lsb} SAME-MSB TARGET`);
+ await hold(v.loAnchor,750,`N MSB ${msb} UP${lsb} CLEAR LOW`);
+}
+async function downTrial(msb,lsb){
+ const v=vals(msb),target=v.low+lsb;
+ await hold(v.hiAnchor,1200,`N MSB ${msb} DOWN${lsb} HARD HIGH ANCHOR`);
+ await hold(v.high,1100,`N MSB ${msb} DOWN${lsb} LOCAL HIGH`);
+ await sleep(180);
+ await hold(target,1500,`N MSB ${msb} DOWN${lsb} SAME-MSB TARGET`);
+ await hold(v.hiAnchor,750,`N MSB ${msb} DOWN${lsb} CLEAR HIGH`);
+}
+async function run(){
+ clearAll(); if(!output()){log('ERROR no MIDI output selected');return}
+ const rs=regions();if(!rs.length){log('ERROR no valid regions');return}
+ running=true;log(`BEGIN TEST N ANCHORED SAME-MSB HYSTERESIS regions=${rs.join(',')} anchorSteps=${document.getElementById('anchorSteps').value}`);
+ for(const msb of rs){
+   if(!running)break;log(`BEGIN REGION MSB ${msb}`);
+   await upTrial(msb,112); if(!running)break;
+   await upTrial(msb,113); if(!running)break;
+   await downTrial(msb,113); if(!running)break;
+   await downTrial(msb,112);
+   if(running)log(`END REGION MSB ${msb}`);
+   await sleep(300);
+ }
+ if(running)log('END TEST N ANCHORED SAME-MSB HYSTERESIS');running=false
+}
+document.getElementById('connect').onclick=connect;
+document.getElementById('stop').onclick=stop;
+document.getElementById('run').onclick=run;
+document.getElementById('download').onclick=()=>{
+ const out=output(),ids=['90','99','101','110'];
+ const lines=[
+ 'X-TOUCH COMPACT MOTOR FEEDBACK LSB ANCHORED HYSTERESIS TEST R10',
+ 'Generated: '+new Date().toString(),'',
+ '===== SETUP =====',
+ 'Firmware: '+document.getElementById('fw').value,
+ 'Mode: '+document.getElementById('mode').value,
+ 'MIDI output: '+(out?`${out.name||''} / ${out.manufacturer||''}`:'not connected'),
+ 'Fader/PB channel: '+(Number(chSel.value)+1),
+ 'Requested MSB regions: '+document.getElementById('regions').value,
+ 'Anchor distance MSB steps: '+document.getElementById('anchorSteps').value,'',
+ '===== OBSERVATIONS =====',
+ ...ids.map(x=>`MSB ${x} result: `+document.getElementById('r'+x).value),
+ 'Notes: '+document.getElementById('notes').value,'',
+ '===== MIDI LOG =====',logEl.textContent
+ ];
+ const blob=new Blob([lines.join('\n')],{type:'text/plain'}),a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);a.download='XTouch_Compact_Motor_Feedback_LSB_Anchored_Hysteresis_Test_R10_Report.txt';a.click();
+ setTimeout(()=>URL.revokeObjectURL(a.href),2000)
+};
+</script>
+</body>
+</html>

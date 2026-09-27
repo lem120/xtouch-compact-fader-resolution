@@ -47,3 +47,16 @@ At the tested operating point on firmware 1.14:
 ```
 
 See `docs/motor-feedback-boundary.md` for interpretation and limitations.
+
+
+## R9 / R10 multi-region validation
+
+### `motor-feedback-lsb-multi-region-r9.html`
+
+First multi-region 112/113 test at MSB 90, 99, 101 and 110. This test exposed a reset-state confound: the local same-MSB span was not always enough to guarantee a known starting state.
+
+### `motor-feedback-lsb-anchored-hysteresis-r10.html`
+
+Corrected version. Each trial first uses a distant hard anchor to establish direction/state, then settles on the local LOW or HIGH reference and performs the decisive 112/113 comparison inside the same MSB bucket.
+
+R10 reproduced the same 112/113 boundary at all four tested regions. The firmware receive routine later explained that exact threshold.

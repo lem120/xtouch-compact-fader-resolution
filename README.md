@@ -14,7 +14,9 @@ While developing a high-resolution control workflow for motorized faders, we fou
 - the same test path, using an **X-Touch One**, produces non-zero LSB values and much finer increments;
 - static analysis of the X-Touch Compact firmware bundled with X-TOUCH Editor shows that the controller keeps more position information internally than it exposes in its normal Mackie Control fader output;
 - the Mackie Control output routine explicitly constructs the ordinary fader message with a zero low data byte and a 7-bit fader value in the high data byte, with a special full-scale case.
-- on the **host -> motor** path, the Compact can distinguish two consecutive 14-bit Pitch Bend targets while the MSB remains unchanged: at the tested operating point `12912` (`LSB=112, MSB=100`) resolves low, while `12913` (`LSB=113, MSB=100`) resolves high.
+- on the **host -> motor** path, the Compact can distinguish two consecutive 14-bit Pitch Bend targets while the MSB remains unchanged: `LSB=112` resolves to the lower 7-bit motor target while `LSB=113` resolves to the next target;
+- anchored multi-region tests reproduced the same `112/113` boundary at **MSB 90, 99, 101 and 110**;
+- static disassembly now explains that boundary exactly: the Mackie receive routine compares the Pitch Bend LSB with `112` and increments the MSB-derived motor target only when `LSB > 112`.
 
 The current evidence therefore points to **quantization in the firmware/output path**, rather than a fundamental 7-bit limitation of the motor fader itself.
 
@@ -181,9 +183,52 @@ Raw logs are included as:
 
 A fuller discussion of the methodology and the distinction between **message resolution**, **target resolution** and **physical motor resolution** is in [`docs/motor-feedback-boundary.md`](docs/motor-feedback-boundary.md).
 
-### 3.4 What remains open
+### 3.4 Multi-region anchored validation
 
-The `112/113` boundary is currently established only around this tested region. The next useful experiment is to repeat the same adjacent-count search at several MSB regions across the fader travel. If the boundary pattern repeats regularly, that will help identify the internal target-conversion rule; if it changes with position, calibration or servo mapping is likely involved.
+A first multi-region pass (R9) showed that using only the local same-MSB LOW/HIGH pair was not always enough to force the motor into a known starting state. R10 therefore used a deliberately distant hard anchor before each local test, while keeping the decisive `112/113` comparison inside the same MSB bucket.
+
+With firmware 1.14, Mackie Control mode and Fader 1, the anchored test reproduced the same result at **MSB 90, 99, 101 and 110**:
+
+```text
+from below:  LSB 112 -> lower state
+             LSB 113 -> next state
+
+from above:  LSB 113 -> upper state
+             LSB 112 -> previous state
+```
+
+This made a position-dependent mechanical explanation less likely and gave us a specific digital boundary to look for in the firmware.
+
+### 3.5 Firmware receive routine explains the 112/113 boundary
+
+Static disassembly of the exact firmware image identified by SHA-256
+`7d03b5174f4987d618fb2dadfda50ec65be2054bab3d12a158db12cbdc7941c6`
+shows the relevant Mackie Pitch Bend receive path around `0x08005A42`.
+
+The decisive instructions are:
+
+```asm
+0x08005A68  mov   r0, r4        ; target = MSB
+0x08005A6A  cmp   r5, #112      ; r5 = LSB
+0x08005A6C  bls   keep_target
+0x08005A6E  cmp   r0, #127
+0x08005A70  bhs   keep_target
+0x08005A72  adds  r0, r4, #1    ; LSB > 112 -> next 7-bit target
+```
+
+So the observed boundary is not merely a servo artifact. For the normal non-saturated range, the receive-side behavior is equivalent to rounding the 14-bit target to a 7-bit motor target with a threshold between LSB 112 and 113.
+
+This is equivalent in result to:
+
+```text
+motor7 = (raw14 + 15) >> 7
+```
+
+but the firmware implements the threshold explicitly rather than with that literal arithmetic sequence.
+
+The receive-side finding complements the already identified transmit-side call site around `0x080039AC`, where the normal Mackie fader message deliberately sets the low data byte to zero.
+
+Full notes are in [`docs/firmware-rx-tx-path.md`](docs/firmware-rx-tx-path.md).
 
 ---
 
@@ -341,13 +386,15 @@ The measured 7-bit behavior is not merely an accident of Ableton, MIDI decoding,
 4. The Compact firmware processes nine 16-bit fader samples before MIDI transmission.
 5. It maintains a finer internal value during filtering/decision logic.
 6. The Mackie output call site explicitly sends `LSB=0` for ordinary fader positions and a 7-bit value as the upper data byte.
+7. The Mackie motor-feedback receive path explicitly compares the incoming LSB with `112` and rounds the MSB-derived motor target up only for `LSB > 112`.
+8. Anchored tests at MSB 90, 99, 101 and 110 reproduce that same 112/113 boundary.
 
 ### Not yet proved
 
 1. The exact usable physical resolution of the MF100T in the Compact chassis.
 2. The effective number of noise-free ADC bits after power-supply noise, track noise and mechanical repeatability.
 3. Whether a 12-bit-to-14-bit output mapping will feel stable without additional filtering/hysteresis.
-4. How many distinct, stable motor positions exist across the full travel, and whether the same adjacent-count boundary pattern repeats at other positions.
+4. How many distinct, stable motor positions exist across the full travel outside the four tested MSB regions.
 5. The exact MCU part number.
 6. A safe, repeatable recovery procedure for experimental firmware on every hardware revision.
 7. Compatibility of a future patch with every Compact firmware/board revision.
@@ -450,7 +497,8 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [x] Direct LSB-only motor-position test on X-Touch Compact — low byte affects motor response
 - [x] Same-MSB adjacent-count boundary reproduced: `12912` low / `12913` high at the tested point
 - [x] Boundary checked from both lower and upper states
-- [ ] Repeat adjacent-count boundary search at multiple MSB regions across the fader travel
+- [x] Repeat adjacent-count boundary search at multiple MSB regions across the fader travel — anchored validation at MSB 90, 99, 101 and 110
+- [x] Exact receive-side 112/113 quantization rule located in firmware
 - [ ] Bootloader/update protocol fully documented
 - [ ] Safe recovery path verified
 - [ ] High-resolution experimental patch

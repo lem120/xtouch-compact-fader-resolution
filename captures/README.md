@@ -23,3 +23,7 @@ Keep public captures focused and free of unrelated system information.
 
 - `motor-feedback-lsb-r5-exact-threshold-report.txt` — lower-state exact threshold scan around LSB 112..116.
 - `motor-feedback-lsb-r8-upper-boundary-report.txt` — upper-state same-MSB return scan through the 113/112 boundary.
+
+
+- `motor-feedback-lsb-r9-multi-region-report.txt` — first multi-region pass at MSB 90/99/101/110; useful for exposing the reset-state confound.
+- `motor-feedback-lsb-r10-anchored-hysteresis-report.txt` — anchored multi-region validation used for the final 112/113 result.
