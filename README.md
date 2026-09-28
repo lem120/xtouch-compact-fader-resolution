@@ -511,41 +511,46 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 
 ## Project status
 
-- [x] Raw MIDI measurement in Ableton/MC mode
-- [x] Standalone raw MIDI measurement
-- [x] Standard-mode Pitch Bend measurement
-- [x] X-Touch One A/B control test
-- [x] Firmware image located inside X-TOUCH Editor
-- [x] Cortex-M / STM32F1-class firmware map identified
-- [x] Application image load base corrected to `0x08006000`; lower `0x6000` flash bytes are outside the distributed application image
-- [x] Separate Editor boot/update query protocol identified statically
-- [x] Safe Editor/CoreMIDI virtual-device capture completed with physical Compact disconnected
-- [x] `@AB6` confirmed as uBoot-state query; Editor recognizes nibble-coded `0x11112222`
-- [x] `@ABR` reclassified as normal Layer A/B retrieval, not APP-to-uBoot transition
-- [x] Later Editor command templates `@AB\``, `@ABa` and `@ABb` identified
-- [ ] Exact semantics/order of `@AB\``, `@ABa` and `@ABb` established
-- [x] Stateful virtual-uBoot R4 emulator prepared and published
-- [ ] Stateful virtual-uBoot R4 capture completed
-- [x] Physical `@ABR 01` Layer A response captured: 841-byte SysEx beginning `F0 50 51 52 52 01`
-- [x] R4/R4.1 APP->uBoot heuristic (`@AB\`` -> `@ABa`) rejected by live capture
-- [x] R4.2 prepared: exact Layer A replay, no inferred uBoot transition, no update ACK
-- [ ] Verify whether exact Layer A replay enables Editor Update
-- [x] Nine-channel 16-bit fader acquisition path identified
-- [x] Finer internal fader representation identified
-- [x] MSB-only Mackie fader output call site identified
-- [x] Ableton feedback-map limitation documented as a separate host-side question
-- [x] Direct LSB-only motor-position test on X-Touch Compact — low byte affects motor response
-- [x] Same-MSB adjacent-count boundary reproduced: `12912` low / `12913` high at the tested point
-- [x] Boundary checked from both lower and upper states
-- [x] Repeat adjacent-count boundary search at multiple MSB regions across the fader travel — anchored validation at MSB 90, 99, 101 and 110
-- [x] Exact receive-side 112/113 quantization rule located in firmware
-- [ ] Bootloader/update protocol fully documented
-- [ ] Safe recovery path verified
-- [x] TX-only RAW12 diagnostic patch prepared and byte-verified (not flashed)
-- [ ] High-resolution experimental patch validated on hardware
-- [ ] Ableton/SSL Remote end-to-end validation
+### Confirmed
 
----
+- [x] Compact Mackie fader TX is effectively MSB-only over normal travel; ordinary Pitch Bend LSB is forced to zero.
+- [x] X-Touch One A/B capture demonstrates active low-bit fader transmission through the same measurement chain.
+- [x] Nine-channel 16-bit acquisition path and finer internal fader position identified in firmware.
+- [x] Compact motor RX uses the Pitch Bend LSB and implements the observed 112/113 rounding boundary.
+- [x] Application image load base is `0x08006000`; the lower `0x6000` bytes are absent from the distributed APP binary.
+- [x] `@AB6` is the uBoot-state query. Positive signature is nibble-coded `0x11112222`.
+- [x] `@ABR` is normal Layer A/B retrieval, not APP-to-uBoot transition.
+- [x] Updater preamble observed as `@AB8`, `@AB3`, `@AB4`, `@AB5` after positive uBoot detection.
+- [x] Firmware transfer consists of 29 wire frames; frames 1..28 map to the padded `0xE000` APP image.
+- [x] Editor transfer CRC algorithm identified: STM32-style CRC32, polynomial `0x04C11DB7`, seed `0xFFFFFFFF`, little-endian 32-bit words.
+- [x] Editor pads the APP image to `0xE000`, computes its CRC with offset `0x34` zero, then writes the resulting CRC at `0x34`.
+- [x] Original APP global CRC is `0x1C044CDE`; prepared block-0/app-frame CRC is `0x73C44D52`, matching the captured real Editor transfer.
+- [x] Vendor Editor 1.21 updater worker contains a reproducible 3-byte stack-canary overwrite in both ARM64 and x86_64 slices.
+- [x] Full 29-frame virtual transfer completed; no additional host-side finalize SysEx follows the ACK for frame 28.
+- [x] Software MCU reset returns directly to APP; no transient uBoot response was detected in 240 rapid `@AB6` probes over ~1.2 s.
+- [x] APP-version gating rejected: a virtual APP reporting firmware 1.13 still leaves Update disabled when `@AB6` is silent.
+- [x] Tested Compact power-on combinations `MC + Layer A`, `MC + Layer B`, and `MC + Layer A + Layer B` all return normal APP 1.14.
+- [x] TX11 experimental patch candidate prepared offline: preserve coarse MSB, derive LSB from four fine position bits, yielding 16 substeps per coarse step.
+- [x] TX11 candidate diff, hashes, endpoint behavior and all 524,288 patch-site input cases validated offline.
+- [x] TX11 transfer-image preparation validated against the Editor algorithm.
+- [x] Offline validity-predicate analysis rejects simple whole-image CRC-residue rules and supports a saved-marker/recompute comparison model.
+
+### Strong evidence / current model
+
+- The updater/bootloader resides outside the distributed APP image, below `0x08006000`.
+- Offset `0x34` is boot/application validity metadata stored in a reserved Cortex-M vector-table word.
+- A plausible boot check is: validate APP vector structure; save the word at `0x34`; treat that word as zero; recompute CRC across the `0xE000` APP slot; compare the result with the saved word.
+- A Compact whose APP is not considered bootable can remain in the separate updater state; however a Compact-specific, intentional boot-entry/recovery method has not yet been reproduced on the test hardware.
+
+### Still open
+
+- [ ] Directly confirm the real bootloader's APP-validity predicate (bootloader region has not been dumped).
+- [ ] Identify a reproducible Compact-specific uBoot/recovery entry method independent of a working APP.
+- [ ] Verify bootloader physical flash destination behavior, especially treatment of transfer frame 0.
+- [ ] Perform the first physical TX11 flash only after the recovery path is sufficiently characterized.
+- [ ] Validate high-resolution TX11 output, motor behavior and SSL Remote end-to-end on hardware.
+
+Latest research notes: see [`docs/bootloader-updater-notes.md`](docs/bootloader-updater-notes.md).
 
 ### A note on terminology
 
