@@ -436,3 +436,131 @@ stack canary:              rbp - 0x28
 Therefore the copy overwrites three bytes of the stack canary on x86_64 as well. The x86_64 worker then performs the same `__stack_chk_guard` comparison and calls `__stack_chk_fail` on mismatch.
 
 This rules out Rosetta/x86_64 execution as a workaround for the host-side updater crash.
+
+
+## R4.8-R4.25: transfer completion, boot-entry probes and APP-validity model
+
+The later R4 experiments substantially narrowed the remaining unknowns.
+
+### Transfer completion and post-transfer behavior
+
+Virtual updater runs progressed through all 29 transfer frames. After the acknowledgement for frame 28, the Editor's transfer routine considers the host-side transfer complete. No mandatory bootloader finalize SysEx was found after that final acknowledgement.
+
+Subsequent `@AB6` traffic observed after virtual reboot is best interpreted as device rediscovery/polling, not as a flash-finalization command. Normal APP commands `0x60` and `0x61` are therefore no longer treated as required bootloader-finalize operations.
+
+### Software reset does not expose a transient uBoot window
+
+The normal APP accepts the MCU reset message:
+
+```text
+F0 00 00 66 14 08 00 F7
+```
+
+A physical R4.20 test confirmed APP 1.14 before reset, then sent exactly one software reset and polled only `@AB6` rapidly for approximately 1.2 seconds.
+
+Result:
+
+```text
+240 @AB6 queries
+uBoot-positive: NO
+final state: APP 1.14
+```
+
+This rejects the hypothesis that a short, easily missed uBoot response window appears after an ordinary software reset.
+
+### APP firmware version is not the Editor's Update gate
+
+R4.22 presented the Editor with a virtual normal APP reporting firmware 1.13 while deliberately leaving `@AB6` unanswered.
+
+The Editor correctly identified APP 1.13, continued normal APP/Layer-A interaction, but Update remained disabled.
+
+Therefore:
+
+```text
+APP 1.14 + silent @AB6 -> Update disabled
+APP 1.13 + silent @AB6 -> Update disabled
+positive @AB6 signature -> Update enabled
+```
+
+The Editor's Update gate is uBoot state, not simply a newer bundled firmware version.
+
+### Tested Compact power-on combinations
+
+A read-only R4.23 detector observed endpoint naming plus only `@ABQ` and `@AB6` while the physical Compact was power-cycled with selected button combinations.
+
+The following combinations all returned the normal `X-TOUCH COMPACT` endpoint and APP 1.14:
+
+```text
+MC + Layer A
+MC + Layer B
+MC + Layer A + Layer B
+```
+
+The previously tested two-leftmost-lower-buttons combination also did not enter uBoot on the Compact test unit.
+
+These results should be treated as negative evidence for those specific gestures only; they do not prove that no hardware boot-entry gesture exists.
+
+### CRC metadata at APP offset 0x34
+
+The Editor's transfer-image preparation is now cross-checked against a real captured transfer frame.
+
+For the original Compact APP:
+
+```text
+vendor APP word @0x34:               0x00000000
+CRC over padded 0xE000 APP
+  with @0x34 treated as zero:        0x1C044CDE
+Editor-prepared word @0x34:          0x1C044CDE
+CRC of prepared first 0x800 block:   0x73C44D52
+```
+
+The first-block CRC exactly matches the real Editor transfer capture.
+
+The corresponding TX11 candidate values are:
+
+```text
+CRC inserted at @0x34:               0x83D4E96E
+CRC of prepared first 0x800 block:   0xCA825D83
+```
+
+Compact and Mini vendor APP images use the same structural convention: APP base `0x08006000`, plausible Cortex-M vectors, and a zero word at `0x34` before Editor transfer preparation.
+
+### R4.25 validity-predicate analysis
+
+Offline predicate testing rules out several simple interpretations of the prepared image:
+
+```text
+CRC(prepared whole APP) == 0                 -> false
+CRC(prepared whole APP) == stored @0x34      -> false
+stored @0x34 == ~CRC(prepared whole APP)     -> false
+```
+
+For the original Compact image:
+
+```text
+CRC(prepared whole APP) = 0x46E4FC51
+```
+
+For TX11:
+
+```text
+CRC(prepared whole APP) = 0x9D7ABDB7
+```
+
+The model most consistent with all current evidence is therefore:
+
+1. validate basic APP vector structure;
+2. read the saved metadata word at APP offset `0x34`;
+3. treat that word as zero;
+4. recompute the STM32-style CRC across the padded `0xE000` APP area;
+5. compare the recomputed CRC with the saved word.
+
+This is **strong evidence**, not a direct observation of the bootloader implementation. The lower bootloader region has not been dumped, so additional GPIO, hardware-revision, timeout, or metadata checks remain possible.
+
+### Current physical-flash blocker
+
+The TX11 patch itself has passed offline diff validation, exhaustive patch-site behavioral testing, endpoint preservation, and Editor transfer-image construction.
+
+The remaining blocker is not TX11 image construction. It is a Compact-specific recovery/uBoot entry method that is reproducible independently of a working APP.
+
+Until that path is demonstrated, intentionally corrupting the APP merely to force the bootloader remains outside the test plan.
