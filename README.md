@@ -13,14 +13,16 @@ While developing a high-resolution control workflow for motorized faders, we fou
 - this produces effective increments of **128 raw Pitch Bend units**;
 - the same test path, using an **X-Touch One**, produces non-zero LSB values and much finer increments;
 - static analysis of the X-Touch Compact firmware bundled with X-TOUCH Editor shows that the controller keeps more position information internally than it exposes in its normal Mackie Control fader output;
-- the Mackie Control output routine explicitly constructs the ordinary fader message with a zero low data byte and a 7-bit fader value in the high data byte, with a special full-scale case.
+- the Mackie Control output routine explicitly constructs the ordinary fader message with a zero low data byte and a 7-bit fader value in the high data byte, with a special full-scale case;
+- physical experimental validation has now progressed beyond merely activating the LSB: TX14 produces a repeatable grid of **16 fine substeps per MSB**, corresponding to an **effective 11-bit transmitted fader position** mapped into the 14-bit Pitch Bend format;
+- TX14 also removes the earlier replay of intermediate filter-window values; the remaining instability is localized to occasional one-step boundary chatter between adjacent 11-bit codes.
 - on the **host -> motor** path, the Compact can distinguish two consecutive 14-bit Pitch Bend targets while the MSB remains unchanged: `LSB=112` resolves to the lower 7-bit motor target while `LSB=113` resolves to the next target;
 - anchored multi-region tests reproduced the same `112/113` boundary at **MSB 90, 99, 101 and 110**;
 - static disassembly now explains that boundary exactly: the Mackie receive routine compares the Pitch Bend LSB with `112` and increments the MSB-derived motor target only when `LSB > 112`.
 
 The current evidence therefore points to **quantization in the firmware/output path**, rather than a fundamental 7-bit limitation of the motor fader itself.
 
-This matters because it suggests that a higher-resolution output path may be technically possible. That remains an experimental question: electrical noise, calibration, filtering, motor control and bootloader/recovery behavior still need to be characterized before any firmware modification can be considered reliable.
+This matters because the higher-resolution path is no longer only a static-analysis hypothesis. Physical TX14 captures now demonstrate effective 11-bit transmit resolution on the test unit. That result is still experimental rather than release-ready: adjacent-code hysteresis, noise, calibration, repeatability and end-to-end control behavior still need to be characterized.
 
 ---
 
@@ -430,41 +432,38 @@ Those questions matter. A 12-bit ADC does not automatically mean 12 bits of *use
 
 ---
 
-## 10. What a higher-resolution firmware experiment would need to test
+## 10. Current higher-resolution firmware result
 
-The obvious experiment is **not** to invent missing values in the DAW.
+The firmware experiment has now reached physical validation.
 
-It is to preserve the Compact's existing acquisition, calibration, filtering and motor logic, then change only the final representation sent to the host.
+TX11 first demonstrated that the Compact's Mackie Control Pitch Bend LSB could be made active on real hardware, but its fine byte did not yet behave as a stable absolute sub-position.
 
-A first-principles target would look conceptually like:
+Later diagnostic builds identified that exposing values from inside the 16-sample processing window causes repeated replay of intermediate history.
 
-```text
-analog fader
-    -> original ADC acquisition
-    -> original filtering/calibration
-    -> higher-resolution normalized position
-    -> 14-bit Pitch Bend encoding
-         LSB = raw14 & 0x7F
-         MSB = (raw14 >> 7) & 0x7F
-```
+TX14 moves the experimental fine-position decision to the completed processing frame. Physical captures show sixteen repeatable LSB values per MSB:
 
-If the internal useful position is approximately 12-bit, one natural mapping into MIDI Pitch Bend would be:
+~~~text
+0, 8, 16, 24, 32, 40, 48, 56,
+64, 72, 80, 88, 96, 104, 112, 120
+~~~
 
-```text
-raw14 = raw12 << 2
-```
+This corresponds to:
 
-But that is only a starting hypothesis. The real patch must preserve:
+~~~text
+7 MSB bits + 4 fine bits = 11 effective source bits
+2048 digital transmit codes
+raw14 = fine11 << 3
+~~~
 
-- endpoint calibration;
-- deadband/hysteresis;
-- touch behavior;
-- motor feedback stability;
-- host feedback handling;
-- mode switching;
-- safe boot/recovery behavior.
+The transport is still MIDI Pitch Bend and therefore nominally 14-bit, but the three least-significant transport bits are not currently carrying additional source information.
 
-Until the bootloader/update protocol and recovery path are fully understood, **flashing experimental firmware is premature**.
+Slow physical sweeps show ordered 8-raw-unit steps across MSB boundaries in both directions. The earlier high-rate replay of internal sample-window values is no longer present.
+
+The remaining issue is localized **adjacent-code chatter** when the fader rests close to a fine-code boundary. The next target is a small stateful hysteresis that suppresses this one-step oscillation without changing the 8-raw-unit output grid.
+
+This result demonstrates effective 11-bit **digital transmit resolution**. It does not by itself prove 2048 mechanically stable or noise-free physical fader positions.
+
+See [TX14 11-bit physical validation milestone](docs/tx14-11bit-physical-validation-milestone.md) for the current physical-validation milestone.
 
 ---
 
@@ -533,6 +532,9 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [x] TX11 experimental patch candidate prepared offline: preserve coarse MSB, derive LSB from four fine position bits, yielding 16 substeps per coarse step.
 - [x] TX11 candidate diff, hashes, endpoint behavior and all 524,288 patch-site input cases validated offline.
 - [x] TX11 transfer-image preparation validated against the Editor algorithm.
+- [x] TX11 physically validated: the Mackie Control LSB can be made active on real hardware while preserving the full-scale endpoints.
+- [x] TX14 physically validated: sixteen LSB substeps per MSB (`0..120` in steps of 8), corresponding to effective 11-bit transmitted position.
+- [x] TX14 removes the TX12/TX13 replay of intermediate 16-sample-window values; residual instability is reduced to adjacent fine-code chatter.
 - [x] Offline validity-predicate analysis rejects simple whole-image CRC-residue rules and supports a saved-marker/recompute comparison model.
 
 ### Strong evidence / current model
@@ -547,10 +549,13 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [ ] Directly confirm the real bootloader's APP-validity predicate (bootloader region has not been dumped).
 - [ ] Identify a reproducible Compact-specific uBoot/recovery entry method independent of a working APP.
 - [ ] Verify bootloader physical flash destination behavior, especially treatment of transfer frame 0.
-- [ ] Perform the first physical TX11 flash only after the recovery path is sufficiently characterized.
-- [ ] Validate high-resolution TX11 output, motor behavior and SSL Remote end-to-end on hardware.
+- [ ] Add stateful fine-code hysteresis while preserving the TX14 8-raw-unit grid and exact endpoints (TX15 target).
+- [ ] Quantify stable/noise-free effective resolution across the full fader travel and all nine faders.
+- [ ] Validate the stabilized fine-resolution output with SSL Remote end-to-end.
 
-Latest research notes: see [`docs/bootloader-updater-notes.md`](docs/bootloader-updater-notes.md).
+Latest physical-resolution milestone: [TX14 11-bit physical validation](docs/tx14-11bit-physical-validation-milestone.md).
+
+Latest updater research notes: see [`docs/bootloader-updater-notes.md`](docs/bootloader-updater-notes.md).
 
 ### A note on terminology
 
