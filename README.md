@@ -14,15 +14,17 @@ While developing a high-resolution control workflow for motorized faders, we fou
 - the same test path, using an **X-Touch One**, produces non-zero LSB values and much finer increments;
 - static analysis of the X-Touch Compact firmware bundled with X-TOUCH Editor shows that the controller keeps more position information internally than it exposes in its normal Mackie Control fader output;
 - the Mackie Control output routine explicitly constructs the ordinary fader message with a zero low data byte and a 7-bit fader value in the high data byte, with a special full-scale case;
-- physical experimental validation has now progressed beyond merely activating the LSB: TX14 produces a repeatable grid of **16 fine substeps per MSB**, corresponding to an **effective 11-bit transmitted fader position** mapped into the 14-bit Pitch Bend format;
-- TX14 also removes the earlier replay of intermediate filter-window values; the remaining instability is localized to occasional one-step boundary chatter between adjacent 11-bit codes.
+- physical experimental validation has now progressed beyond merely activating the LSB: TX14 established a repeatable grid of **16 fine substeps per MSB**, corresponding to an **effective 11-bit transmitted fader position** mapped into the 14-bit Pitch Bend format;
+- TX15 preserves that 11-bit grid and adds a one-code stateful Schmitt band; direct physical capture retains the 8-raw-unit lattice and exact endpoints while the sustained adjacent-code chatter seen in TX14 is absent from the TX15 validation capture;
+- the TX15 fine-position stream has also been carried end-to-end into Ableton Live / SSL Remote, where distinct fine Pitch Bend codes produce distinct parameter writes instead of being re-quantized to the old MSB-only path;
+- the same Live integration has successfully bound a 16-slot SSL Remote configuration with **16/16 SSL targets associated**.
 - on the **host -> motor** path, the Compact can distinguish two consecutive 14-bit Pitch Bend targets while the MSB remains unchanged: `LSB=112` resolves to the lower 7-bit motor target while `LSB=113` resolves to the next target;
 - anchored multi-region tests reproduced the same `112/113` boundary at **MSB 90, 99, 101 and 110**;
 - static disassembly now explains that boundary exactly: the Mackie receive routine compares the Pitch Bend LSB with `112` and increments the MSB-derived motor target only when `LSB > 112`.
 
 The current evidence therefore points to **quantization in the firmware/output path**, rather than a fundamental 7-bit limitation of the motor fader itself.
 
-This matters because the higher-resolution path is no longer only a static-analysis hypothesis. Physical TX14 captures now demonstrate effective 11-bit transmit resolution on the test unit. That result is still experimental rather than release-ready: adjacent-code hysteresis, noise, calibration, repeatability and end-to-end control behavior still need to be characterized.
+This matters because the higher-resolution path is no longer only a static-analysis hypothesis or a standalone MIDI experiment. Physical TX15 captures demonstrate the effective 11-bit transmit grid on the test unit, and Ableton Live telemetry shows that the full fine value can reach SSL Remote parameter writes end-to-end. The result is still experimental rather than release-ready: long-duration stability, all-nine-fader repeatability, calibration, motor-feedback behavior and additional hardware revisions still need to be characterized.
 
 ---
 
@@ -422,7 +424,7 @@ The measured 7-bit behavior is not merely an accident of Ableton, MIDI decoding,
 
 1. The exact usable physical resolution of the MF100T in the Compact chassis.
 2. The effective number of noise-free ADC bits after power-supply noise, track noise and mechanical repeatability.
-3. Whether a 12-bit-to-14-bit output mapping will feel stable without additional filtering/hysteresis.
+3. Long-duration stability of the TX15 fine-code hysteresis across the full travel and all nine faders.
 4. How many distinct, stable motor positions exist across the full travel outside the four tested MSB regions.
 5. The exact MCU part number.
 6. A safe, repeatable recovery procedure for experimental firmware on every hardware revision.
@@ -432,15 +434,11 @@ Those questions matter. A 12-bit ADC does not automatically mean 12 bits of *use
 
 ---
 
-## 10. Current higher-resolution firmware result
+## 10. Current higher-resolution firmware result — TX15
 
-The firmware experiment has now reached physical validation.
+The firmware experiment has now reached a second physical milestone and its first end-to-end Ableton Live validation.
 
-TX11 first demonstrated that the Compact's Mackie Control Pitch Bend LSB could be made active on real hardware, but its fine byte did not yet behave as a stable absolute sub-position.
-
-Later diagnostic builds identified that exposing values from inside the 16-sample processing window causes repeated replay of intermediate history.
-
-TX14 moves the experimental fine-position decision to the completed processing frame. Physical captures show sixteen repeatable LSB values per MSB:
+TX14 established the completed-frame sampling point and demonstrated sixteen repeatable LSB values per MSB:
 
 ~~~text
 0, 8, 16, 24, 32, 40, 48, 56,
@@ -450,20 +448,36 @@ TX14 moves the experimental fine-position decision to the completed processing f
 This corresponds to:
 
 ~~~text
-7 MSB bits + 4 fine bits = 11 effective source bits
-2048 digital transmit codes
+7 MSB bits + 4 recovered fine bits = 11 effective source bits
+2048 transmitted position codes
 raw14 = fine11 << 3
 ~~~
 
-The transport is still MIDI Pitch Bend and therefore nominally 14-bit, but the three least-significant transport bits are not currently carrying additional source information.
+TX15 keeps that same sampling point and output lattice, but adds a one-code stateful Schmitt band around the last transmitted fine code. Its purpose is to suppress the residual stationary TX14 oscillation between adjacent fine codes without falling back to a coarser transmit step.
 
-Slow physical sweeps show ordered 8-raw-unit steps across MSB boundaries in both directions. The earlier high-rate replay of internal sample-window values is no longer present.
+A direct physical TX15 capture preserves the fine lattice and the exact endpoints:
 
-The remaining issue is localized **adjacent-code chatter** when the fader rests close to a fine-code boundary. The next target is a small stateful hysteresis that suppresses this one-step oscillation without changing the 8-raw-unit output grid.
+~~~text
+bottom = E0 00 00 -> raw14 0
+top    = E0 7F 7F -> raw14 16383
+~~~
 
-This result demonstrates effective 11-bit **digital transmit resolution**. It does not by itself prove 2048 mechanically stable or noise-free physical fader positions.
+Slow movement continues to produce ordered 8-raw-unit fine steps across MSB boundaries. The sustained two-code boundary chatter visible in the TX14 validation capture is not present in the TX15 validation capture.
 
-See [TX14 11-bit physical validation milestone](docs/tx14-11bit-physical-validation-milestone.md) for the current physical-validation milestone.
+The next result closes a second part of the chain: with the TX15-aware SSL Remote Control Surface, Ableton Live receives the full Pitch Bend value and performs distinct SSL parameter writes for distinct fine codes. The recovered low-bit information is therefore no longer lost again at the host integration layer.
+
+The same integration also detects a 16-slot SSL Remote protocol and reaches:
+
+~~~text
+16/16 SSL associati. CORE pronto.
+~~~
+
+This means the Compact's fine-resolution input path and the 16CH Remote binding architecture can coexist in the same working Live session.
+
+The wording remains deliberately precise: TX15 demonstrates **effective 11-bit digital transmit resolution and end-to-end host use of that grid** on the tested path. It does not prove 2048 mechanically stable/noise-free fader positions, and all nine faders have not yet been characterized to the same depth.
+
+See [TX15 physical + Ableton Live validation milestone](docs/tx15-11bit-live-validation-milestone.md) for the current milestone.
+
 
 ---
 
@@ -535,6 +549,10 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [x] TX11 physically validated: the Mackie Control LSB can be made active on real hardware while preserving the full-scale endpoints.
 - [x] TX14 physically validated: sixteen LSB substeps per MSB (`0..120` in steps of 8), corresponding to effective 11-bit transmitted position.
 - [x] TX14 removes the TX12/TX13 replay of intermediate 16-sample-window values; residual instability is reduced to adjacent fine-code chatter.
+- [x] TX15 physically validated on the test unit: the same 8-raw-unit 11-bit lattice and exact endpoints are preserved with one-code Schmitt hysteresis.
+- [x] Sustained adjacent-code chatter from the TX14 validation capture is absent from the TX15 validation capture.
+- [x] TX15 fine Pitch Bend values validated end-to-end inside Ableton Live / SSL Remote: distinct fine codes produce distinct parameter writes.
+- [x] SSL Remote 16CH binding validated in Live with a 16-slot protocol and 16/16 SSL targets associated.
 - [x] Offline validity-predicate analysis rejects simple whole-image CRC-residue rules and supports a saved-marker/recompute comparison model.
 
 ### Strong evidence / current model
@@ -549,11 +567,11 @@ This is a technical/research project, not legal advice. Anyone publishing or dis
 - [ ] Directly confirm the real bootloader's APP-validity predicate (bootloader region has not been dumped).
 - [ ] Identify a reproducible Compact-specific uBoot/recovery entry method independent of a working APP.
 - [ ] Verify bootloader physical flash destination behavior, especially treatment of transfer frame 0.
-- [ ] Add stateful fine-code hysteresis while preserving the TX14 8-raw-unit grid and exact endpoints (TX15 target).
-- [ ] Quantify stable/noise-free effective resolution across the full fader travel and all nine faders.
-- [ ] Validate the stabilized fine-resolution output with SSL Remote end-to-end.
+- [ ] Quantify long-duration stationary stability and noise-free effective resolution across the full fader travel and all nine faders.
+- [ ] Characterize per-fader calibration consistency and motor-feedback behavior on the TX15 grid.
+- [ ] Validate the stabilized path on additional X-Touch Compact hardware/firmware revisions.
 
-Latest physical-resolution milestone: [TX14 11-bit physical validation](docs/tx14-11bit-physical-validation-milestone.md).
+Latest physical + host-integration milestone: [TX15 11-bit physical + Ableton Live validation](docs/tx15-11bit-live-validation-milestone.md).
 
 Latest updater research notes: see [`docs/bootloader-updater-notes.md`](docs/bootloader-updater-notes.md).
 
