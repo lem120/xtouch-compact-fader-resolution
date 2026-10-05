@@ -146,26 +146,113 @@ The full-scale branch sets `r3=0x7F` and copies it into `r2` before reaching the
 **Direct static observation:** file path/hash, vector table, peripheral constants, nine-halfword loops, rolling filter, Mackie output call-site instructions.  
 **Inference:** which exact physical ADC channel maps to which fader, exact effective number of noise-free bits, and how much of the internal resolution can be exposed stably.
 
-
 ## 9. Host-to-motor feedback is a separate experiment
 
-A community report concerning Ableton Live's `PitchBendFeedbackRule.value_pair_map` suggests that the feedback-map API may expose only integer mapping values from `0` to `127`, potentially limiting that particular feedback path to 128 mapped positions.
+The host-to-motor direction must be kept separate from controller-to-host resolution.
 
-This has **not yet been independently reproduced as part of this repository**, so it is tracked as an external observation rather than a measured result. It also does not explain the Compact's controller-to-host measurement, because the Compact's raw USB MIDI stream is already MSB-only before Live receives it.
+In Mackie Control mode, direct raw Pitch Bend tests have independently reproduced a same-MSB boundary where `LSB=112` resolves to the lower 7-bit motor target and `LSB=113` resolves to the next target. Anchored tests reproduced the same boundary at multiple MSB regions, and static disassembly explains the threshold explicitly. See:
 
-The clean test is to bypass the feedback-map abstraction and send ordinary Pitch Bend bytes directly while keeping the MSB constant:
+- [`docs/motor-feedback-boundary.md`](motor-feedback-boundary.md)
+- [`docs/firmware-rx-tx-path.md`](firmware-rx-tx-path.md)
+
+That result does **not** imply 14-bit stable physical motor positioning. It shows that the LSB is processed before a later conversion to a coarser motor target.
+
+In the separate Standard Mode integration used for SSL Remote, the reliable motor-return path is currently:
 
 ```text
-raw=12800 -> LSB=0   MSB=100
-raw=12816 -> LSB=16  MSB=100
-raw=12832 -> LSB=32  MSB=100
-...
-raw=12912 -> LSB=112 MSB=100
+CH2 / CC1..CC9
 ```
 
-Interpretation:
+with one CC number addressing each physical fader individually. That path is currently 7-bit and remains the resolution bottleneck for Standard Mode motor recall.
 
-- visible/repeatable motor movement between those values would show that the Compact receive/motor path can respond to low Pitch Bend bits;
-- no movement until the MSB changes would indicate an effectively 7-bit receive path as well.
+## 10. Standard Mode HR5.2 + Ableton Live validation
 
-The repository includes `tools/motor-feedback-lsb-test.html` for this experiment.
+A separate Standard Mode firmware experiment has now reached end-to-end Live validation.
+
+The validated experimental branch is internally identified as **HR5.2 ENDPOINT-GUARD**. Its test-image metadata is recorded for reproducibility, but the image itself is not distributed:
+
+```text
+size:   53076 bytes
+SHA256: 99381e32b4c3aeb343c6b38c06a1662ff4f5b4b97c2c0113ba4943b782015b2d
+```
+
+The important measured result is that the Compact now emits genuine same-MSB Pitch Bend changes in Standard Mode, with minimum observed deltas around:
+
+```text
+33 raw units
+```
+
+compared with the older coarse step of:
+
+```text
+128 raw units
+```
+
+HR5.2 also suppresses repeated identical endpoint messages. A representative upward sequence ends at:
+
+```text
+16165
+16206
+16248
+16256
+```
+
+without continuing to stream duplicate `16256` messages while the fader remains at the top endpoint.
+
+A five-second stationary test produced:
+
+```text
+STATIONARY 5s: 0 PB
+```
+
+The same physical validation preserved individual Standard Mode motor addressing for all nine faders through `CH2 / CC1..CC9`.
+
+### Ableton Live write-through
+
+With Ableton Live 12.4.6 and the `SSL_Remote_XTouch_Compact_D8_HOSTSYNC` Control Surface, the full incoming Pitch Bend value is decoded and written to the bound SSL Remote parameter.
+
+Representative F1 telemetry includes:
+
+```text
+raw=12768 -> norm=0.748125
+raw=12735 -> norm=0.746191
+raw=12702 -> norm=0.744258
+```
+
+and:
+
+```text
+raw=12370 -> norm=0.724805
+raw=12337 -> norm=0.722871
+raw=12300 -> norm=0.720703
+```
+
+These are distinct fine writes; the Live path is not collapsing them back to the old MSB-only stream.
+
+### Host-sync result
+
+D8 HOSTSYNC also reacts to host-side parameter changes and immediately issues motor-return CC feedback.
+
+Representative telemetry includes:
+
+```text
+HOST CHANGE F5 0.394335926 -> 0.749726295
+MOTOR CC F5 ch=2 cc=5 value=100
+```
+
+and:
+
+```text
+HOST CHANGE F2 0.487441421 -> 0.749726295
+MOTOR CC F2 ch=2 cc=2 value=100
+```
+
+Motor-generated PB arriving while a fader is not touched is rejected instead of being written back into the host parameter, preventing a feedback loop.
+
+The full milestone is documented in [`docs/hr5-2-standard-mode-live-validation-milestone.md`](hr5-2-standard-mode-live-validation-milestone.md).
+
+### Current boundary
+
+The controller-to-host side is now high-resolution in the validated Standard Mode path. The reverse motor path is still quantized to the 7-bit CC return channel.
+
+This is now the next isolated research target.
