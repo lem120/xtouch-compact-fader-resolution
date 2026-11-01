@@ -35,3 +35,9 @@ For host-to-motor resolution tests, please also include:
 - a short video or repeatable physical measurement if claiming sub-MSB motor movement.
 
 Please do not describe a motor movement as high-resolution solely because the transmitted MIDI value was 14-bit; the physical position must be independently observable or measurable.
+
+
+## Later controls / release-preparation reports
+
+For the Standard Mode relative-encoder workflow, also include the profile, whether host feedback had established ownership, the exact driver name/version, encoder index and CC bytes. Label CPU-emulated traces separately from physical USB captures. Describe any endpoint, bank-change or motor-recall problem with a repeatable sequence. Do not attach a vendor firmware image or an entire private DAW project.
+

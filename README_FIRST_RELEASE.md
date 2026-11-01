@@ -1,17 +1,21 @@
-# First-release checklist
+# Public firmware release preparation
 
-Before making the repository public:
+Documentation has been updated; an installable public firmware release has not yet been published.
 
-- [x] Neutral project title and description
-- [x] Clear distinction between measurement, static observation and inference
-- [x] No Behringer firmware binary included
-- [x] Firmware image identified by size and SHA-256 only
-- [x] Compact raw-MIDI sample included
-- [x] X-Touch One control sample included
-- [x] Contribution guidance included
-- [x] GitHub measurement issue template included
-- [ ] Choose a repository licence intentionally
-- [ ] Add the public SSL Remote repository link when available
-- [ ] Optional: add one annotated plot/image comparing Compact vs X-Touch One
+- [x] Keep Compact as the primary subject and CONSOLE as a related application.
+- [x] Preserve the original research article and existing captures/tools.
+- [x] Identify TEST03c and its internal v1.0.0 alias by size and SHA-256.
+- [x] Separate physical observations, maintainer-reported validation and automated tests.
+- [x] Document host-owned relative encoder messages and driver dependencies.
+- [x] Add a download-status page without an unpublished asset link.
+- [ ] Finalize public version naming and distribution format.
+- [ ] State licence/source-availability terms for each distributed component.
+- [ ] Finalize the supported hardware, firmware source image and updater environment.
+- [ ] Package the required profile and matching integration.
+- [ ] Validate and document installation, backup, rollback and supported recovery.
+- [ ] Run the final package checks on the supported physical configuration.
+- [ ] Publish the release assets and their checksums on GitHub Releases.
+- [ ] Update DOWNLOADS.md and the README with the actual version/download link.
+- [ ] Link the separate CONSOLE project when its public page is available.
 
-The repository is technically publishable without the optional items. The licence should be selected before accepting outside contributions.
+Neither emulator results nor successful development-unit use establishes compatibility with every hardware revision. This checklist does not authorize redistribution of a third-party firmware image.

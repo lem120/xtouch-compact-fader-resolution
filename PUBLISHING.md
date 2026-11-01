@@ -1,44 +1,22 @@
-# Publishing plan
+# Publication plan
 
-## Suggested repository name
+The public repository documents the Compact firmware investigation and its subsequent control-workflow development. The front page is a project overview; the original technical article remains in `docs/research-history.md`.
 
-`xtouch-compact-fader-resolution`
+## Current update
 
-## Suggested GitHub description
+- Present the consolidated TEST03c baseline with its exact identity.
+- Distinguish firmware behavior, receiving-driver logic and application features.
+- Preserve measured facts, static observations, CPU-emulated tests and maintainer-reported physical acceptance as distinct evidence.
+- Keep historical tools, captures and milestone notes available.
+- Direct future download enquiries to `DOWNLOADS.md` and GitHub Releases.
+- Mention CONSOLE 4000 E Remote only as a related project; add a link once its public URL exists.
 
-`Measurements, protocol observations and firmware-level notes on X-Touch Compact motor-fader resolution.`
+## Future free download
 
-## Recommended first release
+A free release is planned, but no binary or installer is published by this documentation update. Complete the [release preparation checklist](README_FIRST_RELEASE.md) before attaching an installable asset.
 
-Publish the repository as **research**, not as a firmware release.
+The current preferred distribution approach remains user-side patching of a specific original image. Do not silently change that policy or treat an internal v1.0.0 filename as an existing public release. Source availability and distribution terms must be stated in the actual package.
 
-1. Put the technical article in `README.md`.
-2. Put offsets, disassembly and test methodology in `docs/evidence.md`.
-3. Do not upload the vendor firmware binary.
-4. Add short raw captures that reproduce the Compact vs X-Touch One result.
-5. Add 2–3 annotated screenshots/plots only if they make the evidence easier to understand.
-6. Open GitHub Discussions or Issues for hardware revision / firmware-version reports.
-7. Link to SSL Remote only in the origin/"why this matters" section and at the end.
-8. Keep the Ableton `value_pair_map` observation explicitly labelled as community-reported until independently reproduced.
-9. Publish the LSB-only motor test as a reproducible next experiment, not as a claimed result.
+## Suggested short announcement for this documentation update
 
-## Suggested launch post
-
-**Title:** `X-Touch Compact fader resolution: what the MIDI stream and firmware path show`
-
-**Short copy:**
-
-> While building SSL Remote I hit a repeatable resolution limit on the X-Touch Compact motor faders. I initially suspected Ableton or my MIDI mapping. Raw captures ruled that out. An A/B test with X-Touch One showed active low bits, while the Compact stayed MSB-only. I then found the Compact firmware inside X-TOUCH Editor and traced the fader-related path in the binary. The firmware processes 16-bit samples and retains a finer internal position, but the Mackie Control output call site explicitly sends a zero low data byte for ordinary fader positions. I have published the measurements, offsets and reproduction method here. No custom firmware yet — first priority is a safe recovery path.
-
-Use the repository link as the only CTA. Let the technical work lead readers naturally to SSL Remote.
-
-
-## Social hook
-
-A more provocative framing can be used on social media without changing the repository title:
-
-> **Does the X-Touch Compact have a hidden 14-bit fader path?**
->
-> Raw MIDI says the normal Mackie output behaves like 7-bit. The firmware appears to retain finer fader information internally. We published the measurements and are now testing the motor-feedback direction separately.
-
-Avoid stating that a hidden 14-bit mode already exists. The question is the hook; the repository contains the evidence and open tests.
+> The X-Touch Compact investigation has progressed beyond the first fine-fader experiments. The updated project page now documents the later Standard Mode workflow, continuous relative encoders, LED-ring feedback and the role of the matching driver. The research history remains available, and a free download section is being prepared. No firmware download is published yet.

@@ -1,0 +1,22 @@
+{
+  "baseline": "TEST03c",
+  "internal_distribution_alias": "Xtouch_Compact_v1.0.0.bin",
+  "public_release_available": false,
+  "size_bytes": 54080,
+  "sha256": "7607ea9ae518b0e591bceb901d4e430610863fd72169ea7e802214e1ba06e2d8",
+  "internal_alias_byte_identical": true,
+  "automated_execution": "ARM CPU emulation; physical USB transport simulated",
+  "cpu_cases": {
+    "buttons": 512,
+    "receive": 1936,
+    "ring_patterns": 192,
+    "relative_rotations": 1152,
+    "legacy_sender_comparisons": 576
+  },
+  "total_cpu_cases": 4368,
+  "driver_tests": {
+    "D10f_simulated_Live_host": 68
+  },
+  "physical_validation_in_that_automated_run": false,
+  "later_physical_acceptance": "Reported by maintainer on development unit, separately from CPU-emulated tests; not a multi-revision certification"
+}
